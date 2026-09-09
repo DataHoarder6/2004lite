@@ -3,6 +3,7 @@
 // (ADR-0002) — the facade bus is host->plugin only.
 
 import type { ChatMessage, Inventory, SkillSnapshot } from './types.js';
+import type { CombatEntity, Hitsplat } from './combat.js';
 
 export interface XpGainedEvent {
     kind: 'xp-gained';
@@ -35,7 +36,29 @@ export interface CycleEvent {
     loopCycle: number;
 }
 
-export type FacadeEvent = XpGainedEvent | StatChangedEvent | RunEnergyChangedEvent | InventoryChangedEvent | ChatMessageEvent | CycleEvent;
+export interface AnimStartedEvent {
+    kind: 'anim-started';
+    entity: CombatEntity;
+    animId: number;
+    loopCycle: number;
+}
+
+export interface HitsplatEvent {
+    kind: 'hitsplat';
+    entity: CombatEntity;
+    hitsplat: Hitsplat;
+    loopCycle: number;
+}
+
+export interface TargetChangedEvent {
+    kind: 'target-changed';
+    entity: CombatEntity;
+    /** faced-entity key, null when the entity drops its target. */
+    targetKey: string | null;
+    loopCycle: number;
+}
+
+export type FacadeEvent = XpGainedEvent | StatChangedEvent | RunEnergyChangedEvent | InventoryChangedEvent | ChatMessageEvent | CycleEvent | AnimStartedEvent | HitsplatEvent | TargetChangedEvent;
 
 export type EventKind = FacadeEvent['kind'];
 

@@ -18,6 +18,29 @@ import type { ConfigField } from '#api/config.js';
 import type { Inventory } from '#api/types.js';
 import { FACADE_VERSION, TARGET_CLIENT_BUILD } from '#api/index.js';
 import { SKILL_NAMES, SKILL_USED } from './skills.js';
+import { decodeMenuEntry } from './decode.js';
+import type { HostCombatEntity } from './hooks.js';
+
+/** Client slot of the local player (mirrors LOCAL_PLAYER_INDEX in Client.ts). */
+const LOCAL_PLAYER_SLOT = 2047;
+
+function toCombatEntity(raw: HostCombatEntity): import('#api/combat.js').CombatEntity {
+    return {
+        key: raw.key,
+        kind: raw.kind,
+        slot: raw.slot,
+        typeId: raw.typeId,
+        name: raw.name,
+        health: raw.health,
+        totalHealth: raw.totalHealth,
+        primaryAnim: raw.primaryAnim,
+        faceEntity: raw.faceEntity,
+        combatCycle: raw.combatCycle,
+        x: raw.x,
+        z: raw.z,
+        height: raw.height
+    };
+}
 
 /** comId of the main inventory interface. 2004 build 274. */
 const INVENTORY_COMID = 3214;
@@ -42,7 +65,8 @@ export class Host {
             (id, enabled) => {
                 this.registry.setEnabled(id, enabled);
             },
-            pluginId => this.declaredSchemas.get(pluginId) ?? null
+            pluginId => this.declaredSchemas.get(pluginId) ?? null,
+            () => this.registry.loadFailures()
         );
         this.bus.onHandlerError = (kind, error) => {
             console.warn(`[2004lite] handler for ${kind} threw:`, error);
@@ -53,6 +77,21 @@ export class Host {
         this.wireHooks();
         this.bindPanelHotkey();
         await this.loadPlugins();
+        // Observability for e2e/smoke tests (ADR-0006): plugin states without
+        // needing console (dropped in prod builds).
+        (window as unknown as { __lite4?: unknown }).__lite4 = {
+            facade: FACADE_VERSION,
+            build: TARGET_CLIENT_BUILD,
+            plugins: () =>
+                this.registry.all().map(loaded => ({
+                    id: loaded.manifest.id,
+                    name: loaded.manifest.name,
+                    enabled: loaded.enabled,
+                    error: loaded.error
+                })),
+            objDef: (id: number) => this.clientView().objDef(id),
+            inventory: () => this.lastInventoryEvent
+        };
         console.log(`[2004lite] host ready (facade ${FACADE_VERSION}, build ${TARGET_CLIENT_BUILD})`);
     }
 
@@ -125,14 +164,9 @@ export class Host {
         // 1-based with Cancel excluded, and swap() maps back + guards 0.
         const entries = ctx.entries.slice(1);
         const view: import('#api/plugin.js').MenuSwapView = {
-            entries: entries.map((e, i) => ({
-                index: i + 1,
-                option: e.option,
-                action: e.action,
-                paramA: e.paramA,
-                paramB: e.paramB,
-                paramC: e.paramC
-            })),
+            entries: entries.map((e, i) => decodeMenuEntry(i + 1, e)),
+            // 2004lite: live shift sample travels with the built menu (ADR-0011)
+            isShiftDown: ctx.isShiftDown,
             swap: (i: number, j: number): boolean => ctx.swap(i, j)
         };
         for (const [id, swapper] of this.menuSwappers) {
@@ -259,17 +293,39 @@ export class Host {
                 }
                 return { comId, items };
             },
+            objDef: (id: number) => latest()?.readObjDef(id) ?? null,
             recentChat: (_max: number) => [] as import('#api/types.js').ChatMessage[],
             cameraPitch: () => latest()?.camera.pitch ?? 128,
-            setCameraPitch: (pitch: number) => latest()?.setCameraPitch(pitch) ?? false
+            setCameraPitch: (pitch: number) => latest()?.setCameraPitch(pitch) ?? false,
+            combatEntities: () => latest()?.entities.map(toCombatEntity) ?? [],
+            localPlayer: () => {
+                const entities = latest()?.entities ?? [];
+                const local = entities.find(e => e.kind === 'player' && e.slot === LOCAL_PLAYER_SLOT);
+                return local ? toCombatEntity(local) : null;
+            },
+            worldToScreen: (x: number, z: number, height: number) => latest()?.projectToScreen(x, z, height) ?? null
         };
     }
 
     private busView(pluginId: string): import('#api/events.js').EventBus {
+        const wrapped = new Map<(event: never) => void, (event: never) => void>();
         return {
             on: (kind, handler) => {
-                this.bus.on(kind, handler);
-                const entry = { off: () => this.bus.off(kind, handler) };
+                const original = handler as unknown as (event: never) => void;
+                const guarded = (event: never): void => {
+                    try {
+                        original(event);
+                    } catch (error) {
+                        const loaded = this.registry.get(pluginId);
+                        if (loaded?.enabled) {
+                            this.registry.fail(loaded, error);
+                            this.panel.render(this.registry.all());
+                        }
+                    }
+                };
+                wrapped.set(original, guarded);
+                this.bus.on(kind, guarded as never);
+                const entry = { off: () => this.bus.off(kind, guarded as never) };
                 let list = this.busViews.get(pluginId);
                 if (!list) {
                     list = [];
@@ -278,7 +334,10 @@ export class Host {
                 list.push(entry);
             },
             off: (kind, handler) => {
-                this.bus.off(kind, handler);
+                const original = handler as unknown as (event: never) => void;
+                const guarded = (wrapped.get(original) ?? original) as never;
+                wrapped.delete(original);
+                this.bus.off(kind, guarded);
             }
         };
     }

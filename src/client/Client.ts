@@ -73,7 +73,7 @@ import WordPack from '#/wordfilter/WordPack.js';
 import JagFX from '#/sound/JagFX.js';
 
 // 2004lite: instrumentation boundary (see host/hooks.ts and docs/adr/0001)
-import { ClientHooks, type HostChatLine, type HostClientState, type MinimenuEntry } from '../../host/hooks.js';
+import { ClientHooks, type HostChatLine, type HostClientState, type HostCombatEntity, type MinimenuEntry } from '../../host/hooks.js';
 import { bootHost } from '../../host/bootstrap.js';
 
 const CLIENT_VERSION = 274;
@@ -2598,6 +2598,8 @@ export class Client extends GameShell {
 
         // 2004lite: plugin menu-swap pass on the sorted entries (ADR-0005; swap-only)
         ClientHooks.emitMinimenu({
+            // 2004lite: live shift sample for shift-click swaps (ADR-0011)
+            isShiftDown: this.keyHeld[6] === 1,
             entries: Array.from({ length: this.menuNumEntries }, (_v, i): MinimenuEntry => ({
                 option: this.menuOption[i],
                 action: this.menuAction[i],
@@ -12010,6 +12012,7 @@ export class Client extends GameShell {
                 yaw: this.orbitCameraYaw
             },
             chat: this.hostChatLines(),
+            entities: this.hostCombatEntities(),
             setCameraPitch: (pitch: number): boolean => {
                 if (pitch < 128 || pitch > 383) {
                     return false;
@@ -12023,7 +12026,89 @@ export class Client extends GameShell {
                     return null;
                 }
                 return { ids: inv.linkObjType.slice(), counts: inv.linkObjNumber.slice() };
+            },
+            readObjDef: (id: number): { name: string; cost: number } | null => {
+                try {
+                    const def: ObjType = ObjType.list(id);
+                    if (!def) {
+                        return null;
+                    }
+                    return { name: def.name ?? 'unknown', cost: def.cost };
+                } catch {
+                    return null;
+                }
+            },
+            projectToScreen: (x: number, z: number, height: number): { x: number; y: number } | null => {
+                this.getOverlayPos(x, z, height);
+                if (this.projectX === -1 || this.projectY === -1) {
+                    return null;
+                }
+                return { x: this.projectX, y: this.projectY };
             }
         };
     }
+
+    // 2004lite: combat-entity snapshot for the facade (ADR-0011)
+    private hostCombatEntities(): HostCombatEntity[] {
+        if (!this.ingame) {
+            return [];
+        }
+        const entities: HostCombatEntity[] = [];
+        for (let i: number = 0; i < this.npcCount; i++) {
+            const npc: ClientNpc | null = this.npc[this.npcIds[i]];
+            if (!npc || !npc.type) {
+                continue;
+            }
+            entities.push({
+                key: `npc:${this.npcIds[i]}`,
+                kind: 'npc',
+                slot: this.npcIds[i],
+                typeId: npc.type.id,
+                name: npc.type.name ?? 'unknown',
+                health: npc.health,
+                totalHealth: npc.totalHealth,
+                primaryAnim: npc.primaryAnim,
+                faceEntity: npc.faceEntity,
+                combatCycle: npc.combatCycle,
+                x: npc.x,
+                z: npc.z,
+                height: npc.height,
+                hitsplats: hostHitsplats(npc)
+            });
+        }
+        for (let i: number = 0; i < this.playerCount; i++) {
+            const player: ClientPlayer | null = this.players[this.playerIds[i]];
+            if (!player) {
+                continue;
+            }
+            entities.push({
+                key: `player:${this.playerIds[i]}`,
+                kind: 'player',
+                slot: this.playerIds[i],
+                typeId: -1,
+                name: player.name ?? 'unknown',
+                health: player.health,
+                totalHealth: player.totalHealth,
+                primaryAnim: player.primaryAnim,
+                faceEntity: player.faceEntity,
+                combatCycle: player.combatCycle,
+                x: player.x,
+                z: player.z,
+                height: player.height,
+                hitsplats: hostHitsplats(player)
+            });
+        }
+        return entities;
+    }
+}
+
+// 2004lite: active hitsplat slots for the facade combat differ (ADR-0011)
+function hostHitsplats(entity: ClientEntity): { type: number; value: number; cycle: number }[] {
+    const hits: { type: number; value: number; cycle: number }[] = [];
+    for (let i: number = 0; i < 4; i++) {
+        if (entity.damageCycles[i] > 0) {
+            hits.push({ type: entity.damageTypes[i], value: entity.damageValues[i], cycle: entity.damageCycles[i] });
+        }
+    }
+    return hits;
 }

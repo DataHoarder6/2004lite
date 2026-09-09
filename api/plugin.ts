@@ -3,7 +3,8 @@
 import type { ConfigSchema, ConfigStore } from './config.js';
 import type { EventBus } from './events.js';
 import type { Overlay } from './overlay.js';
-import type { ChatMessage, Inventory, MapPosition, SkillSnapshot } from './types.js';
+import type { ChatMessage, Inventory, MapPosition, MenuEntry, SkillSnapshot } from './types.js';
+import type { CombatEntity, ScreenPoint } from './combat.js';
 
 /** Manifest shape: manifest.json beside the built plugin entry. */
 export interface PluginManifest {
@@ -29,10 +30,21 @@ export interface ClientState {
     runEnergy: number;
     mapPosition(): MapPosition | null;
     readInventory(comId: number): Inventory | null;
+    /** Cache object definition (name + shop cost). Null for unknown ids. */
+    objDef(id: number): { name: string; cost: number } | null;
     recentChat(max: number): ChatMessage[];
     cameraPitch(): number;
     /** Benign client-local write (ADR-0005): clamp-range camera pitch. */
     setCameraPitch(pitch: number): boolean;
+    /** Visible combat entities (local player + NPCs + players), freshest cycle. */
+    combatEntities(): CombatEntity[];
+    /** The local player entity, null outside the game world. */
+    localPlayer(): CombatEntity | null;
+    /**
+     * Project fine world coords to screen pixels (for entity-anchored
+     * overlays). Null when behind the camera or off-screen.
+     */
+    worldToScreen(x: number, z: number, height: number): ScreenPoint | null;
 }
 
 export interface MenuSwapper {
@@ -45,14 +57,9 @@ export interface MenuSwapper {
 }
 
 export interface MenuSwapView {
-    entries: ReadonlyArray<{
-        index: number;
-        option: string;
-        action: number;
-        paramA: number;
-        paramB: number;
-        paramC: number;
-    }>;
+    entries: ReadonlyArray<MenuEntry>;
+    /** Live shift state sampled at menu-build time (ADR-0011). */
+    isShiftDown: boolean;
     /** Exchange two entries by index. Returns false (no-op) for invalid indices. */
     swap(i: number, j: number): boolean;
 }
@@ -119,4 +126,6 @@ export function defineMenuPlugin(factory: (ctx: PluginContext) => WithMenuSwap):
 }
 
 /** Re-exported for plugin convenience. */
-export type { SkillSnapshot, Inventory, MapPosition, ChatMessage };
+export type { SkillSnapshot, Inventory, MapPosition, ChatMessage, MenuEntry };
+export type { CombatEntity, CombatEntityKind, Hitsplat, AttackRateTable, ScreenPoint } from './combat.js';
+export { npcAttackRate, weaponAttackRate } from './combat.js';
