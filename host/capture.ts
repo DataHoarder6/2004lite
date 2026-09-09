@@ -85,6 +85,12 @@ function capitalize(word: string): string {
 
 export interface CaptureDeps {
     isSwapperEnabled: () => boolean;
+    /**
+     * Shift-free capture (menu-swapper `capture-mode` config). Browsers force
+     * their own menu on Shift+right-click (Firefox skips the contextmenu
+     * event entirely), so capture rows must also be reachable without Shift.
+     */
+    isCaptureArmed: () => boolean;
     getRulesText: () => string;
     setRulesText: (text: string) => void;
     rerender: () => void;
@@ -93,13 +99,20 @@ export interface CaptureDeps {
 
 export class MenuCapture {
     private pending = new Map<number, PendingCapture>();
+    private lastLabels: string[] = [];
 
     constructor(private readonly deps: CaptureDeps) {}
 
-    /** Append capture rows for a shift+right-click menu. */
+    /** Labels appended to the most recent menu (debug/e2e observability). */
+    labels(): string[] {
+        return [...this.lastLabels];
+    }
+
+    /** Append capture rows for a shift+right-click (or capture-armed) menu. */
     menuBuilt(ctx: MinimenuContext): void {
         this.pending.clear();
-        if (!ctx.isShiftDown || !this.deps.isSwapperEnabled()) {
+        this.lastLabels = [];
+        if ((!ctx.isShiftDown && !this.deps.isCaptureArmed()) || !this.deps.isSwapperEnabled()) {
             return;
         }
         const game = ctx.entries.filter((entry, i) => i !== 0 && !isCaptureOption(entry.option));
@@ -135,6 +148,7 @@ export class MenuCapture {
         const index = ctx.appendEntry(option);
         if (index !== -1) {
             this.pending.set(index, capture);
+            this.lastLabels.push(option);
         }
     }
 }

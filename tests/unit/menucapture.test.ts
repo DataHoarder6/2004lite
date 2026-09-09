@@ -43,12 +43,13 @@ describe('buildCaptureOffer', () => {
 });
 
 describe('MenuCapture', () => {
-    function harness(enabled = true, rules = '') {
+    function harness(enabled = true, rules = '', armed = false) {
         let stored = rules;
         let renders = 0;
         const logs: unknown[][] = [];
         const capture = new MenuCapture({
             isSwapperEnabled: () => enabled,
+            isCaptureArmed: () => armed,
             getRulesText: () => stored,
             setRulesText: text => {
                 stored = text;
@@ -99,5 +100,13 @@ describe('MenuCapture', () => {
         h2.capture.menuBuilt(disabled);
         expect(disabled.appended).toEqual([]);
         expect(h.capture.clickConsumed(3)).toBe(false);
+    });
+
+    it('appends rows without shift when capture mode is armed', () => {
+        const h = harness(true, '', true);
+        const ctx = context(BANKER_MENU.slice(), false);
+        h.capture.menuBuilt(ctx);
+        expect(ctx.appended).toContain('> Left-click: Bank (Banker)');
+        expect(h.capture.labels()).toContain('> Left-click: Bank (Banker)');
     });
 });

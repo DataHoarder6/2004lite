@@ -42,10 +42,12 @@ function state(entities: HostCombatEntity[], loopCycle = 100): HostClientState {
         camera: { pitch: 128, yaw: 0 },
         chat: [],
         entities,
+        wornWeaponId: null,
         setCameraPitch: () => true,
         readInventory: () => null,
         readObjDef: () => null,
         readGroundItems: () => [],
+        revealed: [],
         projectTile: () => null,
         projectToScreen: () => null
     };

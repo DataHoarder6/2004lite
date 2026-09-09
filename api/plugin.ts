@@ -44,6 +44,11 @@ export interface ClientState {
     cameraPitch(): number;
     /** Benign client-local write (ADR-0005): clamp-range camera pitch. */
     setCameraPitch(pitch: number): boolean;
+    /**
+     * Worn right-hand obj id for weapon attack-rate lookup (ADR-0011).
+     * Null when unarmed: the server falls back to attackrate 4.
+     */
+    wornWeaponId(): number | null;
     /** Visible combat entities (local player + NPCs + players), freshest cycle. */
     combatEntities(): CombatEntity[];
     /** The local player entity, null outside the game world. */

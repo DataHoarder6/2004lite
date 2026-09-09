@@ -28,6 +28,9 @@ export interface Inventory {
     items: InventoryItem[];
 }
 
+/** Main backpack interface id (build 274). The host watches it every cycle. */
+export const INVENTORY_COMID = 3214;
+
 export type ChatType = 'game' | 'player' | 'private-in' | 'private-out' | 'trade-request' | 'duel-request' | 'other';
 
 export interface ChatMessage {

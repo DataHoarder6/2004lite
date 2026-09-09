@@ -1,0 +1,8 @@
+{
+    "id": "npc-attacktimer",
+    "name": "NPC Attack Timer",
+    "version": "0.1.0",
+    "entry": "index.js",
+    "facade": "0.2.0",
+    "targetClientBuild": 274
+}

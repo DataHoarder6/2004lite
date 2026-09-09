@@ -31,6 +31,13 @@ export default definePlugin(ctx => {
             { key: 'bank-shift', label: 'Shift: largest bank quantity', type: 'boolean', default: true },
             { key: 'walk-deprioritize', label: 'Shift: Walk-here to bottom', type: 'boolean', default: true },
             {
+                key: 'capture-mode',
+                label: 'Capture mode: swap rows on every menu',
+                type: 'boolean',
+                default: false,
+                description: 'Appends swap-capture rows without holding Shift (browsers force their own menu on Shift+right-click).'
+            },
+            {
                 key: CUSTOM_RULES_KEY,
                 label: 'Custom swaps (target => option)',
                 type: 'string',

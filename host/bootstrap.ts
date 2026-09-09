@@ -16,6 +16,7 @@ import type { PluginContext, PluginManifest } from '#api/plugin.js';
 import type { Overlay } from '#api/overlay.js';
 import type { ConfigField } from '#api/config.js';
 import type { Inventory } from '#api/types.js';
+import { INVENTORY_COMID } from '#api/types.js';
 import { FACADE_VERSION, TARGET_CLIENT_BUILD } from '#api/index.js';
 import { CUSTOM_RULES_KEY, MENU_SWAPPER_ID, isCaptureOption } from '#api/swaprules.js';
 import { SKILL_NAMES, SKILL_USED } from './skills.js';
@@ -44,9 +45,6 @@ function toCombatEntity(raw: HostCombatEntity): import('#api/combat.js').CombatE
     };
 }
 
-/** comId of the main inventory interface. 2004 build 274. */
-const INVENTORY_COMID = 3214;
-
 export class Host {
     private readonly bus = new QueuedEventBus();
     private readonly differ = new StateDiffer();
@@ -59,6 +57,8 @@ export class Host {
     private readonly capture: MenuCapture;
     private lastState: HostClientState | null = null;
     private lastInventoryEvent: Inventory | null = null;
+    /** Latest swapper-view options + capture labels (debug/e2e observability). */
+    private lastMenuOptions: string[] = [];
 
     constructor(private readonly baseUrl: string = '') {
         this.registry = new PluginRegistry(
@@ -67,6 +67,7 @@ export class Host {
         );
         this.capture = new MenuCapture({
             isSwapperEnabled: () => this.registry.get(MENU_SWAPPER_ID)?.enabled ?? false,
+            isCaptureArmed: () => this.configs.get(MENU_SWAPPER_ID)?.get<boolean>('capture-mode') ?? false,
             getRulesText: () => this.configs.get(MENU_SWAPPER_ID)?.get<string>(CUSTOM_RULES_KEY) ?? '',
             setRulesText: text => {
                 const config = this.configs.get(MENU_SWAPPER_ID);
@@ -109,7 +110,8 @@ export class Host {
                     error: loaded.error
                 })),
             objDef: (id: number) => this.clientView().objDef(id),
-            inventory: () => this.lastInventoryEvent
+            inventory: () => this.lastInventoryEvent,
+            menu: () => ({ entries: [...this.lastMenuOptions], capture: this.capture.labels() })
         };
         console.log(`[2004lite] host ready (facade ${FACADE_VERSION}, build ${TARGET_CLIENT_BUILD})`);
     }
@@ -146,6 +148,10 @@ export class Host {
 
     private onCycle(ctx: CycleEndContext): void {
         this.lastState = ctx.state;
+        // Tick pulse first: countdown plugins (attack timers) decrement before
+        // same-flush attack resets land, so a fresh period isn't immediately
+        // decremented. QueuedEventBus flushes after all publishes anyway.
+        this.bus.publish({ kind: 'cycle', loopCycle: ctx.loopCycle });
         this.differ.watchInventory(INVENTORY_COMID);
         const events = this.differ.snapshot(ctx.state);
         for (const event of events) {
@@ -187,6 +193,7 @@ export class Host {
         // The view is live: swap() reorders view entries and retracks index
         // fields, so sequential plugin swaps observe consistent positions.
         const list = ctx.entries.flatMap((e, i) => (i === 0 || isCaptureOption(e.option) ? [] : [decodeMenuEntry(i, e)]));
+        this.lastMenuOptions = list.map(e => e.option);
         const view: import('#api/plugin.js').MenuSwapView = {
             entries: list,
             // 2004lite: live shift sample travels with the built menu (ADR-0011)
@@ -364,6 +371,7 @@ export class Host {
             recentChat: (_max: number) => [] as import('#api/types.js').ChatMessage[],
             cameraPitch: () => latest()?.camera.pitch ?? 128,
             setCameraPitch: (pitch: number) => latest()?.setCameraPitch(pitch) ?? false,
+            wornWeaponId: () => latest()?.wornWeaponId ?? null,
             combatEntities: () => latest()?.entities.map(toCombatEntity) ?? [],
             localPlayer: () => {
                 const entities = latest()?.entities ?? [];

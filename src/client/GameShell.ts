@@ -455,6 +455,9 @@ export default abstract class GameShell {
             ch = 4;
         } else if (keyCode.code === 17) {
             ch = 5;
+        } else if (keyCode.code === 16) {
+            // 2004lite: restore Shift (ch 6); upstream zeroes it above and never restores, leaving keyHeld[6] at 0 and facade isShiftDown dead.
+            ch = 6;
         } else  if (keyCode.code === 8 || keyCode.code === 127) {
             ch = 8;
         } else if (keyCode.code === 9) {
@@ -515,6 +518,10 @@ export default abstract class GameShell {
             ch = 4;
         } else if (keyCode.code === 17) {
             ch = 5;
+            // 2004lite: Shift release mirrors the keydown restore above —
+            // without it keyHeld[6] sticks at 1 after the first Shift press.
+        } else if (keyCode.code === 16) {
+            ch = 6;
         } else  if (keyCode.code === 8 || keyCode.code === 127) {
             ch = 8;
         } else if (keyCode.code === 9) {

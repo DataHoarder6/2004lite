@@ -100,9 +100,11 @@ export default definePlugin(ctx => {
             g.font = 'bold 12px Arial';
             g.textAlign = 'right';
             g.fillStyle = '#ffd700';
-            let y = 40 + 4;
+            // Viewport top-right (fixed-mode scene at (4,4) 512x334): drops
+            // previously drew at canvas x=712, over the minimap/side panel.
+            let y = 4 + 20;
             for (const drop of drops.slice(0, 5)) {
-                g.fillText(`+${drop.amount} ${drop.name} xp`, 716 - 4, y);
+                g.fillText(`+${drop.amount} ${drop.name} xp`, 4 + 512 - 6, y);
                 y += 16;
             }
             g.restore();

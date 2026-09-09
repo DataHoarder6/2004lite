@@ -417,6 +417,10 @@ export class Client extends GameShell {
     private playerOpPriority: boolean[] = new TypedArray1d(5, false);
 
     private groundObj: (LinkList<ClientObj> | null)[][][] = new TypedArray3d(BuildArea.LEVELS, BuildArea.SIZE, BuildArea.SIZE, null);
+    //2004lite: reveal-origin records for the ground-items despawn estimate
+    // (ADR-0012). Drained once per tick by hostState(); entries carry world
+    // coords so the differ can match first-sightings without packet taps.
+    private hostRevealed: { level: number; tileX: number; tileZ: number; id: number }[] = [];
     private locChanges: LinkList<LocChange> = new LinkList();
     private projectiles: LinkList<ClientProj> = new LinkList();
     private spotanims: LinkList<MapSpotAnim> = new LinkList();
@@ -1463,7 +1467,15 @@ export class Client extends GameShell {
                         this.loginPass = this.loginPass.substring(0, this.loginPass.length - 1);
                     }
 
-                    if (key === 9 || key === 10 || key === 13) {
+                    // 2004lite: Enter on password submits when both fields are
+                    // filled (Tab still toggles fields, as before).
+                    if ((key === 10 || key === 13) && this.loginUser.length > 0 && this.loginPass.length > 0) {
+                        await this.login(this.loginUser, this.loginPass, false);
+
+                        if (this.ingame) {
+                            return;
+                        }
+                    } else if (key === 9 || key === 10 || key === 13) {
                         this.loginSelect = 0;
                     }
 
@@ -7356,6 +7368,10 @@ export class Client extends GameShell {
 
                 const obj: ClientObj = new ClientObj(id, count);
                 this.groundObj[this.minusedlevel][x][z]?.push(obj);
+                //2004lite: record reveal origin (see hostRevealed). Revealed
+                // stacks are ~100 ticks old already (Obj.REVEAL), so the
+                // despawn estimate counts the public phase, not a fresh 200.
+                this.hostRevealed.push({ level: this.minusedlevel, tileX: x + this.mapBuildBaseX, tileZ: z + this.mapBuildBaseZ, id });
                 this.showObject(x, z);
             }
         } else if (opcode === ServerProt.P_LOCMERGE) {
@@ -12029,6 +12045,17 @@ export class Client extends GameShell {
             },
             chat: this.hostChatLines(),
             entities: this.hostCombatEntities(),
+            //2004lite: drained reveal records (see OBJ_REVEAL site). hostState
+            // runs once per tick at cycle end, so drain-per-read is exact.
+            revealed: this.hostRevealed.splice(0),
+            //2004lite: worn weapon for the attack-timer weapon-period lookup
+            // (ADR-0011). Appearance slot 3 is the right hand: 0x200+objId
+            // when a weapon is worn (see ClientPlayer model build), else an
+            // identity-kit part (<0x200) or empty (0) = unarmed.
+            wornWeaponId: (() => {
+                const worn: number = this.localPlayer?.appearance?.[3] ?? 0;
+                return worn >= 0x200 ? worn - 0x200 : null;
+            })(),
             setCameraPitch: (pitch: number): boolean => {
                 if (pitch < 128 || pitch > 383) {
                     return false;

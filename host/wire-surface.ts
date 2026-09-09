@@ -54,6 +54,7 @@ export const WIRE_SURFACE: string[] = [
     'recentChat',
     'cameraPitch',
     'setCameraPitch',
+    'wornWeaponId',
     'combatEntities',
     'localPlayer',
     'worldToScreen',
@@ -156,5 +157,7 @@ export const WIRE_SURFACE: string[] = [
     'plugins',
     'enabled',
     'objDef',
-    'inventory'
+    'inventory',
+    'menu',
+    'capture'
 ];

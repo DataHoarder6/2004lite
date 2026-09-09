@@ -22,6 +22,14 @@ export interface HostGroundStack {
     count: number;
 }
 
+/** A stack that arrived via OBJ_REVEAL (world coords, matched by the differ). */
+export interface HostRevealedStack {
+    level: number;
+    tileX: number;
+    tileZ: number;
+    id: number;
+}
+
 export interface HostCombatHitsplat {
     type: number;
     value: number;
@@ -60,11 +68,24 @@ export interface HostClientState {
     };
     chat: HostChatLine[];
     entities: HostCombatEntity[];
+    /**
+     * Worn right-hand obj id (local player's appearance slot 3,
+     * 0x200+objId when a weapon is worn). Null when unarmed: the server
+     * falls back to attackrate 4 (player_melee/ranged.rs2). Read by the
+     * attack-timer plugin for weapon-period lookup (ADR-0011).
+     */
+    wornWeaponId: number | null;
     setCameraPitch(pitch: number): boolean;
     readInventory(comId: number): { ids: Int32Array; counts: Int32Array } | null;
     readObjDef(id: number): { name: string; cost: number } | null;
     /** All ground-item stacks in build-area coords, world-adjusted. */
     readGroundItems(): HostGroundStack[];
+    /**
+     * Stacks revealed to the player since the last tick (OBJ_REVEAL,
+     * world coords). ~100 ticks old already (server Obj.REVEAL): the despawn
+     * estimate counts their public phase (ADR-0012).
+     */
+    revealed: HostRevealedStack[];
     /**
      * World tile -> screen via getOverlayPos math. Null when offscreen.
      * Reads live camera state, so overlays call it per-frame.

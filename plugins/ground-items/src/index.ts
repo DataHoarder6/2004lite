@@ -8,6 +8,7 @@ import { definePlugin } from '#api/plugin.js';
 import type { MenuSwapView } from '#api/plugin.js';
 import type { GroundItem } from '#api/types.js';
 import { formatStack, matchList, parseList } from './match.js';
+import { remainingMs, remainingTicks, windowFractionLeft } from './despawn.js';
 
 // RuneLite GroundItemsConfig defaults.
 const COLOR_DEFAULT = '#ffffff';
@@ -19,11 +20,18 @@ const COLOR_HIGH = '#ff9600';
 const COLOR_INSANE = '#ff66b2';
 const COLOR_TIMER = '#ffff00';
 
-// Server rules mirror (ADR-0012): standard loot window 200 ticks @ 600ms.
-const DESPAWN_TICKS = 200;
-const TICK_MS = 600;
+// Server rules mirror (ADR-0012): durations run from spawn; see despawn.ts.
 const STRING_GAP = 15;
 const LIFT = 40;
+
+// Fixed-mode viewport (Client.gameDraw: scene at (4,4) 512x334, side panel
+// from x=516, chat from y=338). The game repaints only the viewport every
+// frame — overlay pixels over side/chat panels smear until those panels
+// repaint, so world-anchored drawing stays clipped inside.
+const VIEW_X = 4;
+const VIEW_Y = 4;
+const VIEW_W = 512;
+const VIEW_H = 334;
 
 type PriceMode = 'off' | 'high' | 'low' | 'both';
 type ValueMode = 'high' | 'low' | 'highest';
@@ -51,13 +59,14 @@ export default definePlugin(ctx => {
 
     // Wall-clock spawn per ground key (event-driven; immune to client
     // cycle-rate drift). Reset on quantity merge, mirroring the server
-    // lifecycle reset (Engine-TS World.addObj).
-    const spawnWall = new Map<string, number>();
+    // lifecycle reset (Engine-TS World.addObj). Reveal-origin stacks count
+    // their shorter public-phase window (despawn.ts).
+    const spawnWall = new Map<string, { at: number; revealed: boolean }>();
     ctx.events.on('ground-item-spawned', event => {
-        spawnWall.set(event.item.key, Date.now());
+        spawnWall.set(event.item.key, { at: Date.now(), revealed: event.item.revealed });
     });
     ctx.events.on('ground-item-quantity', event => {
-        spawnWall.set(event.item.key, Date.now());
+        spawnWall.set(event.item.key, { at: Date.now(), revealed: event.item.revealed });
     });
     ctx.events.on('ground-item-despawned', event => {
         spawnWall.delete(event.item.key);
@@ -140,29 +149,41 @@ export default definePlugin(ctx => {
         return ` (HA: ${ha} / LA: ${la})`;
     }
 
+    function spawnRecord(key: string): { at: number; revealed: boolean } | null {
+        const record = spawnWall.get(key);
+        if (record) {
+            return record;
+        }
+        // Present before plugin load (or missed event): assume a fresh
+        // private stack rather than a blank timer.
+        return { at: Date.now(), revealed: false };
+    }
+
     function timerSuffix(key: string): string {
         const mode = config.get<string>('despawn-timer') as TimerMode;
         if (mode === 'off' || mode === 'pie') {
             return '';
         }
-        const spawned = spawnWall.get(key) ?? Date.now();
-        const remainingMs = DESPAWN_TICKS * TICK_MS - (Date.now() - spawned);
-        if (remainingMs <= 0) {
+        const record = spawnRecord(key);
+        if (!record) {
+            return '';
+        }
+        const remaining = remainingMs(record.at, Date.now(), record.revealed);
+        if (remaining <= 0) {
             return '';
         }
         if (mode === 'seconds') {
-            return ` - ${(remainingMs / 1000).toFixed(1)}`;
+            return ` - ${(remaining / 1000).toFixed(1)}`;
         }
-        return ` - ${Math.ceil(remainingMs / TICK_MS)}`;
+        return ` - ${remainingTicks(record.at, Date.now(), record.revealed)}`;
     }
 
     function timerFraction(key: string): number | null {
-        const spawned = spawnWall.get(key);
-        if (spawned === undefined) {
+        const record = spawnWall.get(key);
+        if (!record) {
             return null;
         }
-        const fraction = 1 - (Date.now() - spawned) / (DESPAWN_TICKS * TICK_MS);
-        return fraction <= 0 ? null : Math.min(fraction, 1);
+        return windowFractionLeft(record.at, Date.now(), record.revealed);
     }
 
     ctx.setOverlay({
@@ -178,6 +199,11 @@ export default definePlugin(ctx => {
             g.save();
             g.font = '12px Arial';
             g.textAlign = 'center';
+            // World-anchored drawing stays inside the repainted viewport
+            // (see VIEW_*): outside it overlay pixels smear over static UI.
+            g.beginPath();
+            g.rect(VIEW_X, VIEW_Y, VIEW_W, VIEW_H);
+            g.clip();
             for (const row of rows) {
                 const { item } = row;
                 const tileKey = `${item.level}/${item.tileX}/${item.tileZ}`;
@@ -189,16 +215,21 @@ export default definePlugin(ctx => {
                 stacked.set(tileKey, offset + 1);
                 const y = point.y - STRING_GAP * offset;
                 const label = `${item.name}${item.qty > 1 ? ` (${formatStack(item.qty)})` : ''}${priceSuffix(item)}${timerSuffix(item.key)}`;
-                if (tiles && row.color !== COLOR_DEFAULT && row.color !== COLOR_HIDDEN) {
-                    g.strokeStyle = row.color;
-                    g.lineWidth = 1;
-                    g.beginPath();
-                    g.moveTo(point.x, point.y + 4);
-                    g.lineTo(point.x + 6, point.y);
-                    g.lineTo(point.x, point.y - 4);
-                    g.lineTo(point.x - 6, point.y);
-                    g.closePath();
-                    g.stroke();
+                if (tiles) {
+                    // Marker sits on the ground (height 0), not at the
+                    // elevated label point — one projection per tile.
+                    const ground = ctx.client.projectTile(item.tileX, item.tileZ, item.level, 0);
+                    if (ground) {
+                        g.strokeStyle = row.color;
+                        g.lineWidth = 1;
+                        g.beginPath();
+                        g.moveTo(ground.x, ground.y + 4);
+                        g.lineTo(ground.x + 6, ground.y);
+                        g.lineTo(ground.x, ground.y - 4);
+                        g.lineTo(ground.x - 6, ground.y);
+                        g.closePath();
+                        g.stroke();
+                    }
                 }
                 if (timerMode === 'pie') {
                     const fraction = timerFraction(item.key);

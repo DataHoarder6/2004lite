@@ -10,6 +10,12 @@ import type { CombatEntity } from '#api/combat.js';
 
 const CHAT_WINDOW = 10;
 
+/** Stat packets settle within a tick or two of login; 10 cycles (6s) is ample. */
+const LOGIN_SETTLE_CYCLES = 10;
+
+/** Reveal records that never match a sighting expire (stale tile reuse). */
+const REVEAL_TTL_CYCLES = 10;
+
 /** Client chat-type code -> facade ChatType. */
 const CHAT_TYPE_MAP: Record<number, ChatType> = {
     0: 'game',
@@ -40,9 +46,18 @@ export class StateDiffer {
     private lastChatHead: string | null = null;
     private lastChatWindow: ChatMessage[] = [];
     private watchedInventories = new Set<number>();
-    private groundSeen = new Map<string, { qty: number; firstSeenCycle: number }>();
+    private groundSeen = new Map<string, { qty: number; firstSeenCycle: number; revealed: boolean }>();
     private groundCache: GroundItem[] = [];
+    /** Reveal records awaiting their first sighting, with arrival cycle (ADR-0012). */
+    private revealedKeys = new Map<string, number>();
     private lastEntities = new Map<string, { primaryAnim: number; faceEntity: number; hitCycle: number }>();
+    /**
+     * loopCycle of the first in-game snapshot after a reset. Stat packets
+     * arrive staged over the first cycles after login, so 0 -> X fills must
+     * not emit xp-gained until the settle window passes (else login shows a
+     * burst as if all XP was just earned).
+     */
+    private loginCycle: number | null = null;
 
     snapshot(state: HostClientState): FacadeEvent[] {
         const events: FacadeEvent[] = [];
@@ -52,6 +67,11 @@ export class StateDiffer {
             return events;
         }
 
+        if (this.loginCycle === null) {
+            this.loginCycle = state.loopCycle;
+        }
+        const settled = state.loopCycle - this.loginCycle >= LOGIN_SETTLE_CYCLES;
+
         // XP + level diffs
         if (this.lastXp && this.lastXp.length === state.statXP.length) {
             for (let i = 0; i < state.statXP.length; i++) {
@@ -59,7 +79,7 @@ export class StateDiffer {
                     continue;
                 }
                 const skill = toSkill(i, state);
-                if (state.statXP[i] !== this.lastXp[i] && state.statXP[i] > 0) {
+                if (settled && state.statXP[i] !== this.lastXp[i] && state.statXP[i] > 0) {
                     events.push({ kind: 'xp-gained', skill, delta: state.statXP[i] - this.lastXp[i] });
                 }
                 if (state.statEffectiveLevel[i] !== this.lastLevels![i]) {
@@ -224,6 +244,8 @@ export class StateDiffer {
         this.groundSeen.clear();
         this.groundCache = [];
         this.lastEntities.clear();
+        this.loginCycle = null;
+        this.revealedKeys.clear();
     }
 
     /** Latest enriched ground items (first-seen ticks attached). */
@@ -234,11 +256,22 @@ export class StateDiffer {
     /**
      * Ground-item poll-diff over the client's pile snapshot. Quantity merges
      * reset first-seen, mirroring the server lifecycle reset (ADR-0012).
+     * Reveal-origin stacks (first seen via OBJ_REVEAL, ~100 ticks old) keep
+     * revealed=true so the estimate counts their public phase.
      */
     private diffGround(state: HostClientState): FacadeEvent[] {
         const events: FacadeEvent[] = [];
         const seen = new Set<string>();
         const items: GroundItem[] = [];
+
+        for (const record of state.revealed ?? []) {
+            this.revealedKeys.set(`${record.level}/${record.tileX}/${record.tileZ}/${record.id}`, state.loopCycle);
+        }
+        for (const [key, at] of [...this.revealedKeys]) {
+            if (state.loopCycle - at > REVEAL_TTL_CYCLES) {
+                this.revealedKeys.delete(key);
+            }
+        }
 
         let stacks: { level: number; tileX: number; tileZ: number; id: number; count: number }[] = [];
         try {
@@ -252,6 +285,11 @@ export class StateDiffer {
             seen.add(key);
             const def = safeObjDef(state, stack.id);
             const previous = this.groundSeen.get(key);
+            const justRevealed = this.revealedKeys.get(key) !== undefined;
+            if (justRevealed) {
+                this.revealedKeys.delete(key);
+            }
+            const revealed = previous ? previous.revealed || justRevealed : justRevealed;
             const firstSeenCycle = previous && previous.qty === stack.count ? previous.firstSeenCycle : state.loopCycle;
             const item: GroundItem = {
                 key,
@@ -264,14 +302,14 @@ export class StateDiffer {
                 highAlch: def ? Math.max(Math.floor((def.cost * 6) / 10), 1) : 0,
                 lowAlch: def ? Math.max(Math.floor((def.cost * 4) / 10), 1) : 0,
                 firstSeenCycle,
-                revealed: false
+                revealed
             };
             items.push(item);
             if (!previous) {
-                this.groundSeen.set(key, { qty: stack.count, firstSeenCycle: state.loopCycle });
+                this.groundSeen.set(key, { qty: stack.count, firstSeenCycle: state.loopCycle, revealed });
                 events.push({ kind: 'ground-item-spawned', item });
             } else if (previous.qty !== stack.count) {
-                this.groundSeen.set(key, { qty: stack.count, firstSeenCycle: state.loopCycle });
+                this.groundSeen.set(key, { qty: stack.count, firstSeenCycle: state.loopCycle, revealed });
                 events.push({ kind: 'ground-item-quantity', item, previousQty: previous.qty });
             }
         }

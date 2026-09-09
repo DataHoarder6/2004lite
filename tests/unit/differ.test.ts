@@ -15,10 +15,12 @@ function state(overrides: Partial<HostClientState> = {}): HostClientState {
         camera: { pitch: 128, yaw: 0 },
         chat: [],
         entities: [],
+        wornWeaponId: null,
         setCameraPitch: () => false,
         readInventory: () => null,
         readObjDef: () => null,
         readGroundItems: () => [],
+        revealed: [],
         projectTile: () => null,
         projectToScreen: () => null,
         ...overrides
@@ -51,11 +53,47 @@ describe('StateDiffer', () => {
 
         const next = base.slice();
         next[0] = 115;
-        const events = differ.snapshot(state({ statXP: next }));
+        const events = differ.snapshot(state({ statXP: next, loopCycle: 25 }));
 
         const xp = events.filter(e => e.kind === 'xp-gained');
         expect(xp).toHaveLength(1);
         expect(xp[0]).toMatchObject({ kind: 'xp-gained', delta: 15, skill: { index: 0, name: 'attack' } });
+    });
+
+    it('marks reveal-origin stacks and keeps the flag across merges', () => {
+        const differ = new StateDiffer();
+        const stack = (id: number, count: number) => ({ level: 0, tileX: 3200, tileZ: 3200, id, count });
+        differ.snapshot(
+            state({
+                loopCycle: 50,
+                readGroundItems: () => [stack(1, 1)],
+                revealed: [{ level: 0, tileX: 3200, tileZ: 3200, id: 1 }]
+            })
+        );
+        expect(differ.ground().find(i => i.id === 1)).toMatchObject({ revealed: true, firstSeenCycle: 50 });
+
+        const events = differ.snapshot(state({ loopCycle: 60, readGroundItems: () => [stack(1, 5)], revealed: [] }));
+        expect(events.find(e => e.kind === 'ground-item-quantity')).toMatchObject({
+            item: { revealed: true, firstSeenCycle: 60 }
+        });
+    });
+
+    it('suppresses staged stat delivery right after login, then tracks', () => {
+        const differ = new StateDiffer();
+        const staged = new Int32Array(25);
+        staged[0] = 1000;
+        differ.snapshot(state({ statXP: staged, loopCycle: 100 }));
+
+        // more skills fill in over the next cycles: no xp burst
+        const filled = staged.slice();
+        filled[2] = 2000;
+        expect(differ.snapshot(state({ statXP: filled, loopCycle: 102 })).filter(e => e.kind === 'xp-gained')).toEqual([]);
+
+        // genuine gain after the settle window emits against latest values
+        const gained = filled.slice();
+        gained[2] = 2015;
+        const events = differ.snapshot(state({ statXP: gained, loopCycle: 120 }));
+        expect(events.filter(e => e.kind === 'xp-gained')).toMatchObject([{ delta: 15 }]);
     });
 
     it('never emits for unused skill slots', () => {
