@@ -1,31 +1,40 @@
 {
-    "name": "client2",
+    "name": "2004lite",
     "module": "src/client/Client.ts",
     "type": "module",
     "imports": {
         "#3rdparty/*": "./src/3rdparty/*",
+        "#api/*": "./api/*",
         "#/*": "./src/*"
     },
     "scripts": {
         "build": "bun run bundle.ts",
-        "build:dev": "bun run bundle.ts dev"
+        "build:dev": "bun run bundle.ts dev",
+        "host:install": "bun run scripts/host-install.ts",
+        "sideload": "bun run scripts/sideload.ts",
+        "plugins:build": "bun run scripts/plugins-build.ts",
+        "lint": "eslint src host api plugins scripts",
+        "test": "vitest run",
+        "test:e2e": "playwright test"
     },
     "dependencies": {
         "fflate": "^0.8.2"
     },
     "devDependencies": {
         "@eslint/js": "^9.39.2",
+        "@playwright/test": "^1.55.0",
         "@types/bun": "latest",
         "@types/node-forge": "^1.3.14",
+        "@vitest/browser": "^3.2.4",
         "eslint": "^9.39.2",
         "globals": "^17.0.0",
         "jiti": "^2.6.1",
         "node-forge": "^1.3.2",
+        "playwright": "^1.55.0",
         "prettier": "^3.7.1",
         "terser": "^5.46.0",
-        "typescript-eslint": "^8.53.0"
-    },
-    "peerDependencies": {
-        "typescript": "^5.0.0"
+        "typescript": "^5.9.3",
+        "typescript-eslint": "^8.53.0",
+        "vitest": "^3.2.4"
     }
 }

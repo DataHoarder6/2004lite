@@ -7,3 +7,8 @@ private.pem
 public.pem
 
 .idea
+
+# 2004lite: generated plugin artifacts (rebuilt by plugins:build) and the
+# generated sideload index are not tracked; sources + manifests are.
+plugins/*/dist/
+plugins/index.json

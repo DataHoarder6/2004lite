@@ -1,0 +1,8 @@
+{
+    "id": "inventory-value",
+    "name": "Inventory Value",
+    "version": "0.1.0",
+    "entry": "index.js",
+    "facade": "0.1.0",
+    "targetClientBuild": 274
+}

@@ -50,5 +50,10 @@ chat, camera, interact) that the client executes exactly as if the player
 performed it.
 _Avoid_: packet, command, macro, bot
 
+**Menu Swap**: Plugin mutation of the right-click menu that exchanges two
+existing entries (text, action, params together). Swap-only: entries are never
+added, removed, or synthesized; index 0 (Cancel) is untouchable.
+_Avoid_: menu entry injection
+
 **Plugin Hub**: The future community distribution channel (external repos,
 commit-pinned, reviewed). Out of scope until MVP ships.

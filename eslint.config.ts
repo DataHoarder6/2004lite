@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
-    globalIgnores(['src/3rdparty/']),
+    globalIgnores(['src/3rdparty/', 'out/', 'tests/e2e/']),
     { files: ['**/*.{js,mjs,cjs,ts,mts,cts}'], plugins: { js }, extends: ['js/recommended'], languageOptions: { globals: globals.browser } },
     tseslint.configs.recommended,
     {
@@ -30,5 +30,10 @@ export default defineConfig([
                 }
             ]
         }
+    },
+    {
+        // 2004lite: scripts run in bun, not the browser
+        files: ['scripts/**/*.ts'],
+        languageOptions: { globals: globals.node }
     }
 ]);

@@ -11,10 +11,12 @@ repo, plus green CI. Nothing else is in scope.
    `plugins/index.json` + built plugins into `$ENGINE_DIR/public/`.
 2. Play at `http://localhost/rs2.cgi` — authentic client, no page/engine
    changes.
-3. Three plugins work:
+3. Four plugins work:
     - **XP Tracker** — exercises events + overlay + persistence
     - **Inventory Value** — exercises config + cache data + overlay
     - **Camera Zoom** — exercises benign client-local write
+    - **Menu Entry Swapper** — exercises menu mutation (swap-only; entries are
+      never added, removed, or index 0 touched; config-driven rules)
 4. CI: Playwright journey suite green against a programmatically booted
    Engine-TS (sqlite singleworld, checked-in world.json, seeded test account).
 
@@ -26,7 +28,7 @@ repo, plus green CI. Nothing else is in scope.
 3. Event bus.
 4. Config panel.
 5. Typed action API (integration tests assert exact bytes).
-6. The three plugins.
+6. The four plugins.
 
 The test bar (ADR-0006) applies from step 1, not bolted on at the end.
 

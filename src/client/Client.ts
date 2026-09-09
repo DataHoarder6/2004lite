@@ -72,6 +72,10 @@ import WordPack from '#/wordfilter/WordPack.js';
 
 import JagFX from '#/sound/JagFX.js';
 
+// 2004lite: instrumentation boundary (see host/hooks.ts and docs/adr/0001)
+import { ClientHooks, type HostChatLine, type HostClientState, type MinimenuEntry } from '../../host/hooks.js';
+import { bootHost } from '../../host/bootstrap.js';
+
 const CLIENT_VERSION = 274;
 
 const MAX_PLAYER_COUNT = 2048;
@@ -115,7 +119,7 @@ export class Client extends GameShell {
     static loopCycle: number = 0;
     static drawCycle: number = 0;
 
-    static CHARSET: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!\"£$%^&*()-_=+[{]};:'@#~,<.>/?\\| ";
+    static CHARSET: string = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!"£$%^&*()-_=+[{]};:\'@#~,<.>/?\\| ';
 
     static readbit = new Int32Array(32);
     static levelExperience: number[] = [];
@@ -455,13 +459,7 @@ export class Client extends GameShell {
     private overMainComId: number = 0;
     private overSideComId: number = 0;
     private activeIcon: number = 3;
-    private sideIcon: number[] = [
-        -1, -1, -1,
-        -1, -1, -1,
-        -1, -1, -1,
-        -1, -1, -1,
-        -1, -1, -1
-    ];
+    private sideIcon: number[] = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1];
     private tutComId: number = -1;
     private tutComMessage: string | null = null;
     private tutFlashIcon: number = -1;
@@ -586,6 +584,9 @@ export class Client extends GameShell {
         }
 
         this.run();
+
+        // 2004lite: boot plugin host inside the bundle (see host/bootstrap.ts)
+        void bootHost();
     }
 
     static setLowMem(): void {
@@ -1744,12 +1745,7 @@ export class Client extends GameShell {
                 this.in.pos = 0;
 
                 this.loginSeed = this.in.g8();
-                const seed: Int32Array = new Int32Array([
-                    Math.floor(Math.random() * 99999999), 
-                    Math.floor(Math.random() * 99999999),
-                    Number(this.loginSeed >> 32n),
-                    Number(this.loginSeed & BigInt(0xffffffff))
-                ]);
+                const seed: Int32Array = new Int32Array([Math.floor(Math.random() * 99999999), Math.floor(Math.random() * 99999999), Number(this.loginSeed >> 32n), Number(this.loginSeed & BigInt(0xffffffff))]);
 
                 this.out.pos = 0;
                 this.out.p1(10);
@@ -2447,6 +2443,10 @@ export class Client extends GameShell {
                 await this.logout();
             }
         }
+
+        // 2004lite: flush queued plugin events after the tick, before the
+        // next cycle (ADR-0006)
+        ClientHooks.emitCycleEnd({ loopCycle: Client.loopCycle, ingame: this.ingame, state: this.hostState() });
     }
 
     private async logout(): Promise<void> {
@@ -2595,6 +2595,38 @@ export class Client extends GameShell {
                 }
             }
         }
+
+        // 2004lite: plugin menu-swap pass on the sorted entries (ADR-0005; swap-only)
+        ClientHooks.emitMinimenu({
+            entries: Array.from({ length: this.menuNumEntries }, (_v, i): MinimenuEntry => ({
+                option: this.menuOption[i],
+                action: this.menuAction[i],
+                paramA: this.menuParamA[i],
+                paramB: this.menuParamB[i],
+                paramC: this.menuParamC[i]
+            })),
+            swap: (i: number, j: number): boolean => {
+                if (i === j || i <= 0 || j <= 0 || i >= this.menuNumEntries || j >= this.menuNumEntries) {
+                    return false;
+                }
+                const tmpOption: string = this.menuOption[i];
+                this.menuOption[i] = this.menuOption[j];
+                this.menuOption[j] = tmpOption;
+                const tmpAction: number = this.menuAction[i];
+                this.menuAction[i] = this.menuAction[j];
+                this.menuAction[j] = tmpAction;
+                const tmpA: number = this.menuParamA[i];
+                this.menuParamA[i] = this.menuParamA[j];
+                this.menuParamA[j] = tmpA;
+                const tmpB: number = this.menuParamB[i];
+                this.menuParamB[i] = this.menuParamB[j];
+                this.menuParamB[j] = tmpB;
+                const tmpC: number = this.menuParamC[i];
+                this.menuParamC[i] = this.menuParamC[j];
+                this.menuParamC[j] = tmpC;
+                return true;
+            }
+        });
     }
 
     // todo: order
@@ -4167,6 +4199,9 @@ export class Client extends GameShell {
         }
 
         this.worldUpdateNum = 0;
+
+        // 2004lite: plugin overlay pass, composited after all game areas (ADR-0004)
+        ClientHooks.emitDrawOverlays({ ctx: canvas2d, width: this.sWid, height: this.sHei, loopCycle: Client.loopCycle, ingame: this.ingame });
     }
 
     private gameDrawMain(): void {
@@ -8342,9 +8377,18 @@ export class Client extends GameShell {
                 const action: number = this.menuAction[this.menuNumEntries - 1];
 
                 if (
-                    action == MiniMenuAction.INV_BUTTON1 || action == MiniMenuAction.INV_BUTTON2 || action == MiniMenuAction.INV_BUTTON3 || action == MiniMenuAction.INV_BUTTON4 || action == MiniMenuAction.INV_BUTTON5 ||
-                    action == MiniMenuAction.OP_HELD1 || action == MiniMenuAction.OP_HELD2 || action == MiniMenuAction.OP_HELD3 || action == MiniMenuAction.OP_HELD4 || action == MiniMenuAction.OP_HELD5 ||
-                    action == MiniMenuAction.USEHELD_START || action === MiniMenuAction.OP_HELD6
+                    action == MiniMenuAction.INV_BUTTON1 ||
+                    action == MiniMenuAction.INV_BUTTON2 ||
+                    action == MiniMenuAction.INV_BUTTON3 ||
+                    action == MiniMenuAction.INV_BUTTON4 ||
+                    action == MiniMenuAction.INV_BUTTON5 ||
+                    action == MiniMenuAction.OP_HELD1 ||
+                    action == MiniMenuAction.OP_HELD2 ||
+                    action == MiniMenuAction.OP_HELD3 ||
+                    action == MiniMenuAction.OP_HELD4 ||
+                    action == MiniMenuAction.OP_HELD5 ||
+                    action == MiniMenuAction.USEHELD_START ||
+                    action === MiniMenuAction.OP_HELD6
                 ) {
                     const slot: number = this.menuParamB[this.menuNumEntries - 1];
                     const comId: number = this.menuParamC[this.menuNumEntries - 1];
@@ -11386,8 +11430,8 @@ export class Client extends GameShell {
         }
 
         if (this.minimapFlagX !== 0) {
-            anchorX = ((this.minimapFlagX * 4) + 2) - ((this.localPlayer.x / 32) | 0);
-            anchorY = ((this.minimapFlagZ * 4) + 2) - ((this.localPlayer.z / 32) | 0);
+            anchorX = this.minimapFlagX * 4 + 2 - ((this.localPlayer.x / 32) | 0);
+            anchorY = this.minimapFlagZ * 4 + 2 - ((this.localPlayer.z / 32) | 0);
             this.minimapDrawDot(anchorY, this.mapmarker1, anchorX);
         }
 
@@ -11923,6 +11967,63 @@ export class Client extends GameShell {
         const y1: number = 264;
         const x2: number = x1 + 278;
         const y2: number = y1 + 20;
-        return !this.ingame && this.loginscreen === 2 && this.mouseX >= x1 && this.mouseX <= x2 && this.mouseY >= y1 && this.mouseY <= y2;
+        return !this.ingame && this.loginscreen === 2 && this.mouseX >= x1 && this.mouseX <= x2 && this.mouseY <= y2;
+    }
+
+    // ---- 2004lite: state snapshot accessors for the host facade.
+    // Small, marked, read-only additions (ADR-0001). No upstream behavior above
+    // this block is modified.
+    private hostChatLines(): HostChatLine[] {
+        const lines: HostChatLine[] = [];
+        for (let i: number = 0; i < 10; i++) {
+            const text: string | null = this.chatText[i];
+            if (!text) {
+                break;
+            }
+            lines.push({
+                type: this.chatType[i],
+                text,
+                sender: this.chatUsername[i] ?? '',
+                cycle: Client.loopCycle
+            });
+        }
+        return lines;
+    }
+
+    hostState(): HostClientState {
+        return {
+            ingame: this.ingame,
+            loopCycle: Client.loopCycle,
+            statXP: this.statXP.slice(),
+            statBaseLevel: this.statBaseLevel.slice(),
+            statEffectiveLevel: this.statEffectiveLevel.slice(),
+            runEnergy: this.runenergy,
+            weight: this.runweight,
+            mapPosition: this.localPlayer
+                ? {
+                      tileX: (this.localPlayer.x >> 7) + this.mapBuildBaseX,
+                      tileZ: (this.localPlayer.z >> 7) + this.mapBuildBaseZ
+                  }
+                : null,
+            camera: {
+                pitch: this.orbitCameraPitch,
+                yaw: this.orbitCameraYaw
+            },
+            chat: this.hostChatLines(),
+            setCameraPitch: (pitch: number): boolean => {
+                if (pitch < 128 || pitch > 383) {
+                    return false;
+                }
+                this.orbitCameraPitch = pitch;
+                return true;
+            },
+            readInventory: (comId: number): { ids: Int32Array; counts: Int32Array } | null => {
+                const inv: IfType = IfType.list[comId];
+                if (!inv || !inv.linkObjType || !inv.linkObjNumber) {
+                    return null;
+                }
+                return { ids: inv.linkObjType.slice(), counts: inv.linkObjNumber.slice() };
+            }
+        };
     }
 }
