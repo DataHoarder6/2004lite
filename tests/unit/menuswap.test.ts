@@ -25,7 +25,7 @@ function swapOnlyFixture(options: string[]): MinimenuContext {
         working[j] = tmp;
         return true;
     };
-    return { entries, swap };
+    return { entries, swap, isShiftDown: false, appendEntry: () => -1 };
 }
 
 describe('menu swap boundary', () => {

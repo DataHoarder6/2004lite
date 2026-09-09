@@ -51,8 +51,10 @@ performed it.
 _Avoid_: packet, command, macro, bot
 
 **Menu Swap**: Plugin mutation of the right-click menu that exchanges two
-existing entries (text, action, params together). Swap-only: entries are never
-added, removed, or synthesized; index 0 (Cancel) is untouchable.
+existing entries (text, action, params together). Swap-only: plugins never
+add, remove, or synthesize entries; index 0 (Cancel) is untouchable. The
+host itself may append clearly-marked chrome rows (capture helpers) that are
+invisible to plugins and never reach game actions.
 _Avoid_: menu entry injection
 
 **Attack Rate**: Server-authoritative combat cadence in ticks (0.6s each),

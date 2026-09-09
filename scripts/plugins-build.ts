@@ -36,7 +36,10 @@ for (const dir of fs.readdirSync(pluginsRoot)) {
     fs.mkdirSync(dist, { recursive: true });
 
     // The facade (api/) is pure: types + stateless helpers. Bundle it into
-    // every plugin so artifacts are self-contained ESM (ADR-0002).
+    // every plugin so artifacts are self-contained ESM (ADR-0002). External
+    // imports would leave bare specifiers (e.g. #api/...) the browser cannot
+    // resolve — this broke all prod plugin loads once; check:wire guards the
+    // client side, self-containment guards this side.
     const result = await Bun.build({
         entrypoints: [entry],
         outdir: dist,

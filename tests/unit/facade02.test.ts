@@ -45,6 +45,8 @@ function state(entities: HostCombatEntity[], loopCycle = 100): HostClientState {
         setCameraPitch: () => true,
         readInventory: () => null,
         readObjDef: () => null,
+        readGroundItems: () => [],
+        projectTile: () => null,
         projectToScreen: () => null
     };
 }

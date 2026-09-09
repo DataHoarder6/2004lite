@@ -17,11 +17,13 @@ function state(overrides: Partial<HostClientState> = {}): HostClientState {
         mapPosition: null,
         camera: { pitch: 128, yaw: 0 },
         chat: [],
+        entities: [],
         setCameraPitch: () => false,
         readInventory: () => null,
         readObjDef: () => null,
         readGroundItems: () => [],
         projectTile: () => null,
+        projectToScreen: () => null,
         ...overrides
     };
 }

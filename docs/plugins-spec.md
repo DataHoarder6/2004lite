@@ -1,6 +1,6 @@
 # Implementation spec: full menu swapper + attack timer + NPC attack timer
 
-Decisions: [ADR-0011](./adr/0011-full-swapper-and-attack-timers.md). Terms:
+Decisions: [ADR-0013](./adr/0013-full-swapper-and-attack-timers.md). Terms:
 [CONTEXT.md](../CONTEXT.md) (Attack Rate, Attack Timer, NPC Attack Timer).
 
 ## 1. Data pipeline: `attackrate` snapshot
