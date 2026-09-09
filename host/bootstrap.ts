@@ -247,6 +247,34 @@ export class Host {
                 return latest()?.runEnergy ?? 0;
             },
             mapPosition: () => latest()?.mapPosition ?? null,
+            objDef: (id: number) => {
+                const state = latest();
+                if (!state?.readObjDef) {
+                    return null;
+                }
+                try {
+                    const def = state.readObjDef(id);
+                    if (!def) {
+                        return null;
+                    }
+                    return {
+                        name: def.name,
+                        cost: def.cost,
+                        highAlch: Math.max(Math.floor((def.cost * 6) / 10), 1),
+                        lowAlch: Math.max(Math.floor((def.cost * 4) / 10), 1)
+                    };
+                } catch {
+                    return null;
+                }
+            },
+            groundItems: () => this.differ.ground(),
+            projectTile: (tileX: number, tileZ: number, level: number, height: number) => {
+                try {
+                    return latest()?.projectTile?.(tileX, tileZ, level, height) ?? null;
+                } catch {
+                    return null;
+                }
+            },
             readInventory: (comId: number) => {
                 const state = latest();
                 const raw = state?.readInventory(comId);

@@ -16,6 +16,9 @@ function state(overrides: Partial<HostClientState> = {}): HostClientState {
         chat: [],
         setCameraPitch: () => false,
         readInventory: () => null,
+        readObjDef: () => null,
+        readGroundItems: () => [],
+        projectTile: () => null,
         ...overrides
     };
 }

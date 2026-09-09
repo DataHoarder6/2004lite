@@ -2,7 +2,7 @@
 // events from cycle-end state diffs. Plugins cannot emit game events
 // (ADR-0002) — the facade bus is host->plugin only.
 
-import type { ChatMessage, Inventory, SkillSnapshot } from './types.js';
+import type { ChatMessage, GroundItem, Inventory, SkillSnapshot } from './types.js';
 
 export interface XpGainedEvent {
     kind: 'xp-gained';
@@ -35,7 +35,23 @@ export interface CycleEvent {
     loopCycle: number;
 }
 
-export type FacadeEvent = XpGainedEvent | StatChangedEvent | RunEnergyChangedEvent | InventoryChangedEvent | ChatMessageEvent | CycleEvent;
+export interface GroundItemSpawnedEvent {
+    kind: 'ground-item-spawned';
+    item: GroundItem;
+}
+
+export interface GroundItemDespawnedEvent {
+    kind: 'ground-item-despawned';
+    item: GroundItem;
+}
+
+export interface GroundItemQuantityEvent {
+    kind: 'ground-item-quantity';
+    item: GroundItem;
+    previousQty: number;
+}
+
+export type FacadeEvent = XpGainedEvent | StatChangedEvent | RunEnergyChangedEvent | InventoryChangedEvent | ChatMessageEvent | CycleEvent | GroundItemSpawnedEvent | GroundItemDespawnedEvent | GroundItemQuantityEvent;
 
 export type EventKind = FacadeEvent['kind'];
 
