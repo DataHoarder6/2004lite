@@ -6,7 +6,9 @@
 // marked call in src/client/Client.ts's constructor.
 
 import { ClientHooks } from './hooks.js';
-import type { CycleEndContext, DrawOverlaysContext, HostClientState, MinimenuContext } from './hooks.js';
+import type { CycleEndContext, DrawOverlaysContext, HostClientState, MinimenuContext, TappedPacket } from './hooks.js';
+import type { PacketHandler } from '#api/packets.js';
+import packetNames from '../data/packet-names.json';
 import { QueuedEventBus } from './bus.js';
 import { PluginRegistry } from './loader.js';
 import { PluginConfig } from './config.js';
@@ -46,6 +48,9 @@ function toCombatEntity(raw: HostCombatEntity): import('#api/combat.js').CombatE
     };
 }
 
+/** Packet ring size for the __lite4 debug handle. */
+const PACKET_RING_MAX = 2000;
+
 export class Host {
     private readonly bus = new QueuedEventBus();
     private readonly differ = new StateDiffer();
@@ -60,6 +65,10 @@ export class Host {
     private lastInventoryEvent: Inventory | null = null;
     /** Named-key hotkey subscriptions per plugin id (dropped on disable). */
     private readonly hotkeys = new Map<string, { key: string; handler: HotkeyHandler }[]>();
+    /** Packet-observer subscriptions per plugin id (dropped on disable). */
+    private readonly packetSubs = new Map<string, Set<PacketHandler>>();
+    /** Recent parsed packets for the __lite4 debug handle (ring). */
+    private readonly packetRing: import('#api/packets.js').ParsedPacket[] = [];
     /** Latest swapper-view options + capture labels (debug/e2e observability). */
     private lastMenuOptions: string[] = [];
     /** Last published server-tick index (wall-clock, 600ms boundaries). */
@@ -118,7 +127,8 @@ export class Host {
             inventory: () => this.lastInventoryEvent,
             menu: () => ({ entries: [...this.lastMenuOptions], capture: this.capture.labels() }),
             combat: () => this.clientView().combatEntities(),
-            local: () => this.clientView().localPlayer()
+            local: () => this.clientView().localPlayer(),
+            packets: () => [...this.packetRing]
         };
         console.log(`[2004lite] host ready (facade ${FACADE_VERSION}, build ${TARGET_CLIENT_BUILD})`);
     }
@@ -128,7 +138,40 @@ export class Host {
         ClientHooks.onDrawOverlays((ctx: DrawOverlaysContext) => this.onDraw(ctx));
         ClientHooks.onMinimenu((ctx: MinimenuContext) => this.onMenu(ctx));
         ClientHooks.onMenuClick(index => this.capture.clickConsumed(index));
+        ClientHooks.onPacket(tap => this.onPacket(tap));
         window.addEventListener('keydown', this.onHotkey);
+    }
+
+    /** Packet-observer fanout (ADR-0014): names resolved, ring kept, guarded. */
+    private onPacket(tap: TappedPacket): void {
+        const table = tap.direction === 'upstream' ? packetNames.up : packetNames.down;
+        const packet: import('#api/packets.js').ParsedPacket = {
+            direction: tap.direction,
+            opcode: tap.opcode,
+            name: (table as Record<string, string>)[String(tap.opcode)] ?? `UNKNOWN-${tap.opcode}`,
+            size: tap.size,
+            note: tap.note,
+            hex: tap.hex,
+            loopCycle: this.lastState?.loopCycle ?? 0
+        };
+        this.packetRing.push(packet);
+        if (this.packetRing.length > PACKET_RING_MAX) {
+            this.packetRing.splice(0, this.packetRing.length - PACKET_RING_MAX);
+        }
+        for (const [pluginId, handlers] of this.packetSubs) {
+            const loaded = this.registry.get(pluginId);
+            if (!loaded?.enabled) {
+                continue;
+            }
+            for (const handler of [...handlers]) {
+                try {
+                    handler(packet);
+                } catch (error) {
+                    this.registry.fail(loaded, error);
+                    this.panel.render(this.registry.all());
+                }
+            }
+        }
     }
 
     /**
@@ -294,6 +337,7 @@ export class Host {
             this.busViews.delete(pluginId);
         }
         this.hotkeys.delete(pluginId);
+        this.packetSubs.delete(pluginId);
         this.overlays.delete(pluginId);
         this.menuSwappers.delete(pluginId);
     }
@@ -306,6 +350,7 @@ export class Host {
             manifest,
             events: this.busView(manifest.id),
             hotkeys: this.hotkeyView(manifest.id),
+            packets: this.packetView(manifest.id),
             client: this.clientView(),
             config,
             declareConfig: (schema: { fields: ConfigField[] }) => {
@@ -430,6 +475,23 @@ export class Host {
                 return local ? toCombatEntity(local) : null;
             },
             worldToScreen: (x: number, z: number, height: number) => latest()?.projectToScreen(x, z, height) ?? null
+        };
+    }
+
+    /** Packet view: subscriptions tagged by plugin id so disable drops them. */
+    private packetView(pluginId: string): import('#api/packets.js').PacketBus {
+        return {
+            on: (handler: PacketHandler) => {
+                let set = this.packetSubs.get(pluginId);
+                if (!set) {
+                    set = new Set();
+                    this.packetSubs.set(pluginId, set);
+                }
+                set.add(handler);
+            },
+            off: (handler: PacketHandler) => {
+                this.packetSubs.get(pluginId)?.delete(handler);
+            }
         };
     }
 

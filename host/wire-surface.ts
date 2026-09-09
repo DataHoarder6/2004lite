@@ -25,6 +25,7 @@ export const WIRE_SURFACE: string[] = [
     'manifest',
     'events',
     'hotkeys',
+    'packets',
     'config',
     'client',
     'declareConfig',
@@ -155,6 +156,13 @@ export const WIRE_SURFACE: string[] = [
     'getRaw',
     'setRaw',
     'all',
+
+    // Packet observer (ADR-0014)
+    'direction',
+    'opcode',
+    'size',
+    'note',
+    'hex',
 
     // __lite4 debug handle
     '__lite4',

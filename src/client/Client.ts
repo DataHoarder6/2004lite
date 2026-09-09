@@ -2441,6 +2441,9 @@ export class Client extends GameShell {
 
         try {
             if (this.stream && this.out.pos > 0) {
+                //2004lite: downstream tap for the packet observer (ADR-0014,
+                // read-only). Segments the flush into per-message sizes.
+                ClientHooks.flushDownstream(this.out.data, this.out.pos);
                 this.stream.write(this.out.data, this.out.pos);
                 this.out.pos = 0;
                 this.noTimeoutTimer = now;
@@ -5989,6 +5992,16 @@ export class Client extends GameShell {
             this.ptype2 = this.ptype1;
             this.ptype1 = this.ptype0;
             this.ptype0 = this.ptype;
+
+            //2004lite: upstream tap for the packet observer (ADR-0014,
+            // read-only). Bulk movement packets carry entity counts instead
+            // of payload hex.
+            ClientHooks.noteUpstream(
+                this.ptype,
+                this.psize,
+                this.ptype === ServerProt.PLAYER_INFO || this.ptype === ServerProt.NPC_INFO ? `players=${this.playerCount} npcs=${this.npcCount}` : '',
+                this.psize <= 64 ? this.in.data.slice(0, this.psize) : null
+            );
 
             if (this.ptype === ServerProt.IF_OPENCHAT) {
                 const comId: number = this.in.g2();

@@ -28,6 +28,8 @@ import sideTabs from '../../plugins/side-tabs/src/index.js';
 import sideTabsManifest from '../../plugins/side-tabs/manifest.json';
 import thickSkin from '../../plugins/thick-skin/src/index.js';
 import thickSkinManifest from '../../plugins/thick-skin/manifest.json';
+import packetObserver from '../../plugins/packet-observer/src/index.js';
+import packetObserverManifest from '../../plugins/packet-observer/manifest.json';
 
 const PLUGINS: { plugin: Plugin; manifest: PluginManifest }[] = [
     { plugin: attackTimer, manifest: attackTimerManifest as PluginManifest },
@@ -38,7 +40,8 @@ const PLUGINS: { plugin: Plugin; manifest: PluginManifest }[] = [
     { plugin: cameraZoom, manifest: cameraZoomManifest as PluginManifest },
     { plugin: xpTracker, manifest: xpTrackerManifest as PluginManifest },
     { plugin: sideTabs, manifest: sideTabsManifest as PluginManifest },
-    { plugin: thickSkin, manifest: thickSkinManifest as PluginManifest }
+    { plugin: thickSkin, manifest: thickSkinManifest as PluginManifest },
+    { plugin: packetObserver, manifest: packetObserverManifest as PluginManifest }
 ];
 
 function startCapture(plugin: Plugin, manifest: PluginManifest): ConfigSchema | null {
@@ -48,6 +51,7 @@ function startCapture(plugin: Plugin, manifest: PluginManifest): ConfigSchema | 
         manifest,
         events,
         hotkeys: { on: (): void => {}, off: (): void => {} },
+        packets: { on: (): void => {}, off: (): void => {} },
         // Start-time client surface some plugins touch (handlers run live).
         client: { setCameraPitch: (): boolean => true, loopCycle: 0 },
         config: { get: (): string => '', set: (): boolean => false },

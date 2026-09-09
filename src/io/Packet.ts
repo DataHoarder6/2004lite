@@ -5,6 +5,9 @@ import Isaac from '#/io/Isaac.js';
 
 import { bigIntModPow, bigIntToBytes, bytesToBigInt } from '#/util/JsUtil.js';
 
+// 2004lite: instrumentation boundary (see host/hooks.ts and docs/adr/0014)
+import { ClientHooks } from '../../host/hooks.js';
+
 export default class Packet extends Linkable2 {
     private static readonly CRC32_POLYNOMIAL: number = 0xedb88320;
 
@@ -190,6 +193,9 @@ export default class Packet extends Linkable2 {
     }
 
     p1Enc(opcode: number): void {
+        //2004lite: downstream tap for the packet observer (ADR-0014,
+        // read-only). Every out message starts here with its opcode.
+        ClientHooks.downstreamOpcode(opcode, this.pos);
         this.view.setUint8(this.pos++, (opcode + (this.random?.nextInt ?? 0)) & 0xff);
     }
 

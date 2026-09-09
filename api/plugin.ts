@@ -3,6 +3,7 @@
 import type { ConfigSchema, ConfigStore } from './config.js';
 import type { EventBus } from './events.js';
 import type { HotkeyBus } from './hotkeys.js';
+import type { PacketBus } from './packets.js';
 import type { Overlay } from './overlay.js';
 import type { ChatMessage, GroundItem, GroundProjection, Inventory, MapPosition, MenuEntry, SkillSnapshot } from './types.js';
 import type { CombatEntity, ScreenPoint } from './combat.js';
@@ -105,6 +106,8 @@ export interface PluginContext {
     events: EventBus;
     /** Named-key hotkeys (host->plugin observe-only, ADR-0005). */
     hotkeys: HotkeyBus;
+    /** Read-only parsed packet tap (ADR-0014 observer, never a send path). */
+    packets: PacketBus;
     config: ConfigStore;
     /** Live client state view (read + benign local writes, ADR-0005). */
     client: ClientState;

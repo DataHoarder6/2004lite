@@ -139,6 +139,34 @@ export interface MinimenuEntry {
     paramC: number;
 }
 
+/** One tapped packet (header + small-payload hex only, ADR-0014). */
+export interface TappedPacket {
+    direction: 'upstream' | 'downstream';
+    opcode: number;
+    /** Payload bytes, excluding opcode/length framing. */
+    size: number;
+    /** Extra tap context (e.g. entity counts on bulk packets). */
+    note: string;
+    /** Hex payload when small (<=64B), null for bulk. */
+    hex: string | null;
+}
+
+export type PacketTap = (packet: TappedPacket) => void;
+
+/** Payload cap for hex capture (movement giants pass size only). */
+const TAP_HEX_BYTES = 64;
+
+function toHex(payload: ArrayLike<number> | null): string | null {
+    if (!payload) {
+        return null;
+    }
+    let out = '';
+    for (let i = 0; i < payload.length; i++) {
+        out += payload[i].toString(16).padStart(2, '0');
+    }
+    return out;
+}
+
 export type MinimenuSwap = (i: number, j: number) => boolean;
 
 export interface MinimenuContext {
@@ -196,5 +224,44 @@ export class ClientHooks {
 
     static emitMinimenu(ctx: MinimenuContext): void {
         this.minimenuMutate?.(ctx);
+    }
+
+    private static packetTap: PacketTap | null = null;
+    private static downstream: { opcode: number; start: number }[] = [];
+
+    static onPacket(tap: PacketTap): void {
+        this.packetTap = tap;
+    }
+
+    /** Upstream arrival (payload fully received, before dispatch). */
+    static noteUpstream(opcode: number, size: number, note: string, payload: Uint8Array | null): void {
+        this.packetTap?.({ direction: 'upstream', opcode, size, note, hex: toHex(payload) });
+    }
+
+    /** Downstream message start (Packet.p1Enc hook): opcode + buffer pos. */
+    static downstreamOpcode(opcode: number, pos: number): void {
+        if (this.packetTap) {
+            this.downstream.push({ opcode, start: pos });
+        }
+    }
+
+    /**
+     * Downstream flush: segment the buffer into per-message sizes.
+     * Best-effort: assumes flushes contain p1Enc-framed messages only
+     * (the login handshake uses p1 and flushes separately).
+     */
+    static flushDownstream(data: Uint8Array, endPos: number): void {
+        const tap = this.packetTap;
+        const segs = this.downstream;
+        this.downstream = [];
+        if (!tap) {
+            return;
+        }
+        for (let i = 0; i < segs.length; i++) {
+            const next = i + 1 < segs.length ? segs[i + 1].start : endPos;
+            const size = Math.max(next - segs[i].start - 1, 0);
+            const hex = size <= TAP_HEX_BYTES ? toHex(data.subarray(segs[i].start + 1, next)) : null;
+            tap({ direction: 'downstream', opcode: segs[i].opcode, size, note: '', hex });
+        }
     }
 }
