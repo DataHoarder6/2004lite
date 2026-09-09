@@ -75,6 +75,12 @@ export interface HostClientState {
      * attack-timer plugin for weapon-period lookup (ADR-0011).
      */
     wornWeaponId: number | null;
+    /**
+     * Server combat-style index (%com_mode, varp 43): 0-3 within the worn
+     * weapon's category. The attack timer pairs it with the rapid snapshot
+     * (rapid only exists at index 1 on bow/crossbow/thrown).
+     */
+    combatMode: number;
     setCameraPitch(pitch: number): boolean;
     readInventory(comId: number): { ids: Int32Array; counts: Int32Array } | null;
     readObjDef(id: number): { name: string; cost: number } | null;

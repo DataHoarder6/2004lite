@@ -186,6 +186,36 @@ export default definePlugin(ctx => {
         return windowFractionLeft(record.at, Date.now(), record.revealed);
     }
 
+    /** Projected tile corners for the highlight quad; null at area edges. */
+    function tileCorners(tileX: number, tileZ: number, level: number): { x: number; y: number }[] | null {
+        const corners: { x: number; y: number }[] = [];
+        const offsets = [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1]
+        ];
+        for (const [dx, dz] of offsets) {
+            const point = ctx.client.projectTile(tileX + dx, tileZ + dz, level, 1);
+            if (!point) {
+                return null;
+            }
+            corners.push(point);
+        }
+        return corners;
+    }
+
+    function hexA(hex: string, alpha: number): string {
+        const match = hex.match(/^#([0-9a-fA-F]{6})$/);
+        if (!match) {
+            return hex;
+        }
+        const red = parseInt(match[1].slice(0, 2), 16);
+        const green = parseInt(match[1].slice(2, 4), 16);
+        const blue = parseInt(match[1].slice(4, 6), 16);
+        return `rgba(${red},${green},${blue},${alpha})`;
+    }
+
     ctx.setOverlay({
         render({ ctx: g }) {
             const rows = visibleRows();
@@ -216,18 +246,21 @@ export default definePlugin(ctx => {
                 const y = point.y - STRING_GAP * offset;
                 const label = `${item.name}${item.qty > 1 ? ` (${formatStack(item.qty)})` : ''}${priceSuffix(item)}${timerSuffix(item.key)}`;
                 if (tiles) {
-                    // Marker sits on the ground (height 0), not at the
-                    // elevated label point — one projection per tile.
-                    const ground = ctx.client.projectTile(item.tileX, item.tileZ, item.level, 0);
-                    if (ground) {
+                    // RuneLite-style filled tile: project all four corners at
+                    // ground height (the old diamond sat 40px up at the label
+                    // point and never covered the tile).
+                    const corners = tileCorners(item.tileX, item.tileZ, item.level);
+                    if (corners) {
+                        g.fillStyle = hexA(row.color, 0.3);
                         g.strokeStyle = row.color;
                         g.lineWidth = 1;
                         g.beginPath();
-                        g.moveTo(ground.x, ground.y + 4);
-                        g.lineTo(ground.x + 6, ground.y);
-                        g.lineTo(ground.x, ground.y - 4);
-                        g.lineTo(ground.x - 6, ground.y);
+                        g.moveTo(corners[0].x, corners[0].y);
+                        for (let c = 1; c < 4; c++) {
+                            g.lineTo(corners[c].x, corners[c].y);
+                        }
                         g.closePath();
+                        g.fill();
                         g.stroke();
                     }
                 }

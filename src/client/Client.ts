@@ -12056,6 +12056,9 @@ export class Client extends GameShell {
                 const worn: number = this.localPlayer?.appearance?.[3] ?? 0;
                 return worn >= 0x200 ? worn - 0x200 : null;
             })(),
+            //2004lite: combat style index for rapid detection (ADR-0011).
+            // %com_mode is varp 43 (Content varp.pack, transmit=yes).
+            combatMode: this.var[43] ?? 0,
             setCameraPitch: (pitch: number): boolean => {
                 if (pitch < 128 || pitch > 383) {
                     return false;
@@ -12181,6 +12184,28 @@ export class Client extends GameShell {
                 z: player.z,
                 height: player.height,
                 hitsplats: hostHitsplats(player)
+            });
+        }
+        //2004lite: the local player is not in playerIds (the scene iterates
+        // self separately at index -1), so without this the facade
+        // localPlayer() is always null and both attack timers idle silently.
+        const self: ClientPlayer | null = this.localPlayer;
+        if (self) {
+            entities.push({
+                key: `player:${LOCAL_PLAYER_INDEX}`,
+                kind: 'player',
+                slot: LOCAL_PLAYER_INDEX,
+                typeId: -1,
+                name: self.name ?? 'unknown',
+                health: self.health,
+                totalHealth: self.totalHealth,
+                primaryAnim: self.primaryAnim,
+                faceEntity: self.faceEntity,
+                combatCycle: self.combatCycle,
+                x: self.x,
+                z: self.z,
+                height: self.height,
+                hitsplats: hostHitsplats(self)
             });
         }
         return entities;

@@ -4,6 +4,9 @@
 import type { LoadedPlugin, PluginLoadError } from './loader.js';
 import type { ConfigField, ConfigSchema } from '#api/config.js';
 
+/** localStorage key for collapsed panel sections (plugin ids). */
+const COLLAPSED_KEY = '2004lite:panel:collapsed';
+
 export class SettingsPanel {
     private root: HTMLElement | null = null;
     private readonly onPluginToggle: (id: string, enabled: boolean) => void;
@@ -94,9 +97,24 @@ export class SettingsPanel {
         const head = document.createElement('div');
         head.className = 'lite4-plugin-head';
 
+        const id = loaded.manifest.id;
         const name = document.createElement('span');
-        name.textContent = `${loaded.manifest.name} (${loaded.manifest.version})`;
+        name.className = 'lite4-plugin-name';
         head.appendChild(name);
+
+        const fields = document.createElement('div');
+        fields.className = 'lite4-plugin-fields';
+
+        const paint = (): void => {
+            const collapsed = this.isCollapsed(id);
+            name.textContent = `${collapsed ? '▸' : '▾'} ${loaded.manifest.name} (${loaded.manifest.version})`;
+            fields.style.display = collapsed ? 'none' : '';
+        };
+        name.addEventListener('click', () => {
+            this.setCollapsed(id, !this.isCollapsed(id));
+            paint();
+        });
+        paint();
 
         const toggle = document.createElement('input');
         toggle.type = 'checkbox';
@@ -107,28 +125,55 @@ export class SettingsPanel {
         });
         head.appendChild(toggle);
         section.appendChild(head);
+        section.appendChild(fields);
 
         if (loaded.error) {
             const err = document.createElement('div');
             err.className = 'lite4-error';
             err.textContent = `disabled after error: ${loaded.error}`;
-            section.appendChild(err);
+            fields.appendChild(err);
             return section;
         }
 
         const schema = this.getSchema(loaded.manifest.id);
         if (schema && schema.fields.length > 0) {
             for (const field of schema.fields) {
-                section.appendChild(this.renderField(loaded, field));
+                fields.appendChild(this.renderField(loaded, field));
             }
         } else {
             const note = document.createElement('div');
             note.className = 'lite4-note';
             note.textContent = 'no settings';
-            section.appendChild(note);
+            fields.appendChild(note);
         }
 
         return section;
+    }
+
+    private readCollapsed(): string[] {
+        try {
+            const raw = localStorage.getItem(COLLAPSED_KEY);
+            const parsed: unknown = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+        } catch {
+            return [];
+        }
+    }
+
+    private isCollapsed(pluginId: string): boolean {
+        return this.readCollapsed().includes(pluginId);
+    }
+
+    private setCollapsed(pluginId: string, collapsed: boolean): void {
+        const ids = this.readCollapsed().filter(id => id !== pluginId);
+        if (collapsed) {
+            ids.push(pluginId);
+        }
+        try {
+            localStorage.setItem(COLLAPSED_KEY, JSON.stringify(ids));
+        } catch {
+            // quota: collapse lasts until the next render
+        }
     }
 
     private onPluginToggleInternal(loaded: LoadedPlugin, enabled: boolean): void {
@@ -242,6 +287,7 @@ export class SettingsPanel {
                 border:1px solid #3d3526; }
             #lite4-host-panel .lite4-plugin-head { display:flex; justify-content:space-between;
                 align-items:center; margin-bottom:4px; font-weight:bold; }
+            #lite4-host-panel .lite4-plugin-name { cursor:pointer; }
             #lite4-host-panel .lite4-field { display:flex; justify-content:space-between; align-items:center;
                 gap:8px; margin:3px 0; }
             #lite4-host-panel .lite4-error { color:#ff6b6b; }

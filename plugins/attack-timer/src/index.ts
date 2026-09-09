@@ -1,7 +1,8 @@
 // Attack Timer: ngraves95/attacktimer port (ADR-0011, docs/plugins-spec.md).
 // Tick number over the local player's head + cooldown bar, driven by the
 // server attackrate snapshot (data/attackrates.json): worn-weapon rate via
-// ClientState.wornWeaponId, rapid style -1 via RapidRule, normal-food eats +3
+// ClientState.wornWeaponId, rapid style read from the client (%com_mode varp
+// + rapid snapshot, never user-specified), normal-food eats +3 hardcoded
 // (Content consume.rs2). Countdown ticks on facade `cycle` events.
 //
 // v1 limits (documented, not silent): any local anim while engaged resets the
@@ -11,11 +12,19 @@
 import { definePlugin } from '#api/plugin.js';
 import { INVENTORY_COMID } from '#api/types.js';
 import type { AnimStartedEvent, InventoryChangedEvent } from '#api/events.js';
-import { weaponAttackRate, type AttackRateTable } from '#api/combat.js';
+import { RAPID_STYLE_INDEX, isRapidWeapon, weaponAttackRate, type AttackRateTable } from '#api/combat.js';
 import tableJson from '../../../data/attackrates.json';
 import { AttackClock, RapidRule } from './clock.js';
 
 const TABLE = tableJson as AttackRateTable;
+
+/**
+ * Ticks the server adds to a pending attack when eating normal food
+ * (Content consume.rs2: skill_delay 3). Hardcoded server truth, not a
+ * setting. v1 limit: potions/gnome foods also trigger the consumption
+ * heuristic although the server adds no delay for them.
+ */
+const EAT_DELAY_TICKS = 3;
 
 const BAR_W = 36;
 const BAR_H = 4;
@@ -35,22 +44,6 @@ export default definePlugin(ctx => {
         fields: [
             { key: 'show-number', label: 'Show tick number over player', type: 'boolean', default: true },
             { key: 'show-bar', label: 'Show cooldown bar', type: 'boolean', default: true },
-            {
-                key: 'rapid-style',
-                label: 'Rapid attack style (-1 tick)',
-                type: 'boolean',
-                default: false,
-                description: 'Ranged rapid attacks 1 tick faster (Content player_ranged.rs2).'
-            },
-            {
-                key: 'eat-delay-ticks',
-                label: 'Ticks added per eat',
-                type: 'number',
-                default: 3,
-                min: 0,
-                max: 10,
-                description: 'Server adds +3 to a pending attack on normal foods (consume.rs2).'
-            },
             {
                 key: 'period-override',
                 label: 'Force weapon period (0 = auto)',
@@ -78,7 +71,11 @@ export default definePlugin(ctx => {
         if (worn === null) {
             return TABLE.defaultRate;
         }
-        return new RapidRule(config.get<boolean>('rapid-style')).adjust(weaponAttackRate(TABLE, worn));
+        // Rapid is read from the client (%com_mode varp) + snapshot, never
+        // user-specified: style index 1 on a bow/crossbow/thrown attacks a
+        // tick faster (Content player_ranged.rs2).
+        const rapid = ctx.client.combatMode() === RAPID_STYLE_INDEX && isRapidWeapon(TABLE, worn);
+        return new RapidRule(rapid).adjust(weaponAttackRate(TABLE, worn));
     }
 
     ctx.events.on('cycle', () => {
@@ -131,7 +128,7 @@ export default definePlugin(ctx => {
         lastInv = next;
         if (consumed) {
             suppressLoopCycle = ctx.client.loopCycle;
-            clock.onEat(config.get<number>('eat-delay-ticks'));
+            clock.onEat(EAT_DELAY_TICKS);
         }
     });
 

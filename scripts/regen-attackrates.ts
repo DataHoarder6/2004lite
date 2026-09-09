@@ -77,6 +77,53 @@ function resolveIds(rates: Map<string, number>, pack: Map<string, number>, label
     return out;
 }
 
+/**
+ * Obj debugnames whose category attacks rapid at style index 1 (combat.rs2
+ * category -> style-table mapping: bow/crossbow/thrown/javelin tables carry
+ * style_ranged_rapid at index 1; melee/unarmed tables never do).
+ */
+const RAPID_CATEGORIES = new Set(['weapon_bow', 'weapon_crossbow', 'weapon_thrown', 'weapon_javelin']);
+
+/** debugnames in a rapid category (category= line inside the obj section). */
+function collectRapidWeapons(files: string[]): Set<string> {
+    const rapid = new Set<string>();
+    for (const file of files) {
+        let current: string | null = null;
+        for (const raw of fs.readFileSync(file, 'utf-8').split('\n')) {
+            const line = raw.trim();
+            if (line === '' || line.startsWith('//')) {
+                continue;
+            }
+            const section = line.match(/^\[(.+)\]$/);
+            if (section) {
+                current = section[1].trim();
+                continue;
+            }
+            if (current) {
+                const category = line.match(/^category=(\S+)$/);
+                if (category && RAPID_CATEGORIES.has(category[1])) {
+                    rapid.add(current);
+                }
+            }
+        }
+    }
+    return rapid;
+}
+
+/** Resolved rapid obj ids, ascending (stable snapshot bytes). */
+function resolveRapidIds(names: Set<string>, pack: Map<string, number>): number[] {
+    const ids: number[] = [];
+    for (const name of names) {
+        const id = pack.get(name);
+        if (id === undefined) {
+            console.warn(`attackrates: no obj id for rapid [${name}], skipped`);
+            continue;
+        }
+        ids.push(id);
+    }
+    return ids.sort((a, b) => a - b);
+}
+
 const scriptsDir = path.join(CONTENT_DIR, 'scripts');
 if (!fs.existsSync(scriptsDir)) {
     console.error(`CONTENT_DIR has no scripts/: ${CONTENT_DIR}`);
@@ -89,7 +136,9 @@ walk(scriptsDir, '.npc', npcFiles);
 walk(scriptsDir, '.obj', objFiles);
 
 const npc = resolveIds(collectRates(npcFiles), readPack(path.join(CONTENT_DIR, 'pack', 'npc.pack')), 'npc');
-const weapon = resolveIds(collectRates(objFiles), readPack(path.join(CONTENT_DIR, 'pack', 'obj.pack')), 'obj');
+const objPack = readPack(path.join(CONTENT_DIR, 'pack', 'obj.pack'));
+const weapon = resolveIds(collectRates(objFiles), objPack, 'obj');
+const rapid = resolveRapidIds(collectRapidWeapons(objFiles), objPack);
 
 let contentCommit = 'unknown';
 try {
@@ -98,7 +147,7 @@ try {
     console.warn('attackrates: could not read Content commit hash');
 }
 
-const snapshot = { contentCommit, defaultRate: 4, npc, weapon };
+const snapshot = { contentCommit, defaultRate: 4, npc, weapon, rapid };
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
 fs.writeFileSync(OUT, JSON.stringify(snapshot, null, 4) + '\n');
-console.log(`attackrates: ${Object.keys(npc).length} npc + ${Object.keys(weapon).length} weapon rates from ${contentCommit.slice(0, 8)} -> ${OUT}`);
+console.log(`attackrates: ${Object.keys(npc).length} npc + ${Object.keys(weapon).length} weapon rates + ${rapid.length} rapid weapons from ${contentCommit.slice(0, 8)} -> ${OUT}`);

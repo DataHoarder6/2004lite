@@ -1,16 +1,23 @@
 // XP Tracker: exercises events + overlay + localStorage persistence.
-// Shows XP drops and xp/hr per skill, reset-able.
+// Shows rising, fading XP drops plus xp/hr per skill, reset-able.
 
 import { definePlugin } from '#api/plugin.js';
 import type { XpGainedEvent } from '#api/events.js';
 
 const STORE_KEY = '2004lite:plugin:xp-tracker';
 
+/** Pixels a drop rises over its life, like the real client. */
+const DROP_RISE_PX = 20;
+
 interface TrackedSkill {
     xpGained: number;
-    drop: number;
-    dropCycle: number;
     firstGainCycle: number;
+}
+
+interface ActiveDrop {
+    skill: number;
+    amount: number;
+    atCycle: number;
 }
 
 export default definePlugin(ctx => {
@@ -24,16 +31,17 @@ export default definePlugin(ctx => {
             },
             {
                 key: 'drop-duration',
-                label: 'XP drop duration (frames)',
+                label: 'XP drop duration (ticks)',
                 type: 'number',
-                default: 200,
-                min: 10,
-                max: 600
+                default: 7,
+                min: 1,
+                max: 60
             }
         ]
     });
 
     const tracked = new Map<number, TrackedSkill>();
+    const drops: ActiveDrop[] = [];
 
     function load(): void {
         try {
@@ -64,12 +72,14 @@ export default definePlugin(ctx => {
         const skillIndex = event.skill.index;
         let entry = tracked.get(skillIndex);
         if (!entry) {
-            entry = { xpGained: 0, drop: 0, dropCycle: 0, firstGainCycle: event.skill.effectiveLevel };
+            entry = { xpGained: 0, firstGainCycle: event.skill.effectiveLevel };
             tracked.set(skillIndex, entry);
         }
         entry.xpGained += event.delta;
-        entry.drop = event.delta;
-        entry.dropCycle = 0;
+        drops.push({ skill: skillIndex, amount: event.delta, atCycle: ctx.client.loopCycle });
+        if (drops.length > 10) {
+            drops.shift();
+        }
         persist();
     }
 
@@ -82,16 +92,11 @@ export default definePlugin(ctx => {
             if (!config.get<boolean>('show-overlay')) {
                 return;
             }
-            const dropDuration = config.get<number>('drop-duration');
+            const life = Math.max(config.get<number>('drop-duration'), 1);
 
-            const drops: { name: string; amount: number }[] = [];
-            for (const [index, entry] of tracked) {
-                if (entry.drop > 0 && entry.dropCycle < dropDuration) {
-                    entry.dropCycle++;
-                    drops.push({ name: skillName(index), amount: entry.drop });
-                }
+            while (drops.length > 0 && loopCycle - drops[0].atCycle > life) {
+                drops.shift();
             }
-
             if (drops.length === 0) {
                 return;
             }
@@ -102,13 +107,19 @@ export default definePlugin(ctx => {
             g.fillStyle = '#ffd700';
             // Viewport top-right (fixed-mode scene at (4,4) 512x334): drops
             // previously drew at canvas x=712, over the minimap/side panel.
-            let y = 4 + 20;
-            for (const drop of drops.slice(0, 5)) {
-                g.fillText(`+${drop.amount} ${drop.name} xp`, 4 + 512 - 6, y);
-                y += 16;
+            const baseX = 4 + 512 - 6;
+            const baseY = 4 + 20;
+            let slot = 0;
+            for (const drop of drops.slice(-5)) {
+                const age = loopCycle - drop.atCycle;
+                const progress = Math.min(Math.max(age / life, 0), 1);
+                const y = baseY + slot * 16 - progress * DROP_RISE_PX;
+                // Fade over the last 40% of life.
+                g.globalAlpha = progress < 0.6 ? 1 : 1 - (progress - 0.6) / 0.4;
+                g.fillText(`+${drop.amount} ${skillName(drop.skill)} xp`, baseX, y);
+                slot++;
             }
             g.restore();
-            void loopCycle;
         }
     });
 

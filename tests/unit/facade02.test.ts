@@ -3,11 +3,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { decodeMenuEntry, decodeTargetKind, decodeTargetName } from '../../host/decode.js';
-import { npcAttackRate, weaponAttackRate, type AttackRateTable } from '#api/combat.js';
+import { npcAttackRate, weaponAttackRate, isRapidWeapon, type AttackRateTable } from '#api/combat.js';
 import { StateDiffer } from '../../host/differ.js';
 import type { HostClientState, HostCombatEntity } from '../../host/hooks.js';
 
-const TABLE: AttackRateTable = { contentCommit: 'abc123', defaultRate: 4, npc: { '123': 6 }, weapon: { '456': 5 } };
+const TABLE: AttackRateTable = { contentCommit: 'abc123', defaultRate: 4, npc: { '123': 6 }, weapon: { '456': 5 }, rapid: [841] };
 
 function entity(over: Partial<HostCombatEntity> = {}): HostCombatEntity {
     return {
@@ -43,6 +43,7 @@ function state(entities: HostCombatEntity[], loopCycle = 100): HostClientState {
         chat: [],
         entities,
         wornWeaponId: null,
+        combatMode: 0,
         setCameraPitch: () => true,
         readInventory: () => null,
         readObjDef: () => null,
@@ -88,6 +89,11 @@ describe('attack-rate lookup', () => {
         expect(npcAttackRate(TABLE, 999)).toBe(4);
         expect(weaponAttackRate(TABLE, 456)).toBe(5);
         expect(weaponAttackRate(TABLE, 1)).toBe(4);
+    });
+
+    it('flags rapid-category weapons from the snapshot', () => {
+        expect(isRapidWeapon(TABLE, 841)).toBe(true);
+        expect(isRapidWeapon(TABLE, 456)).toBe(false);
     });
 });
 

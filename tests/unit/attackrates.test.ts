@@ -33,6 +33,13 @@ describe('attackrates snapshot', () => {
         expect(table.weapon['863']).toBe(3); // iron_knife: param=attackrate,3
     });
 
+    it('snapshots rapid-category weapons (bow/crossbow/thrown)', () => {
+        const table = load();
+        expect(table.rapid.length).toBeGreaterThan(20);
+        expect(table.rapid).toContain(841); // shortbow: category=weapon_bow
+        expect(table.rapid).toEqual([...table.rapid].sort((a, b) => a - b));
+    });
+
     it('regenerates byte-identically from Content (no drift)', () => {
         const contentDir = process.env.CONTENT_DIR;
         if (!contentDir || !fs.existsSync(path.join(contentDir, 'scripts'))) {

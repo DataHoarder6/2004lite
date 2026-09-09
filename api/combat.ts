@@ -43,7 +43,18 @@ export interface AttackRateTable {
     defaultRate: number;
     npc: Record<string, number>;
     weapon: Record<string, number>;
+    /**
+     * Obj ids whose category attacks rapid at style index 1
+     * (bow/crossbow/thrown/javelin; combat.rs2 category mapping).
+     */
+    rapid: number[];
 }
+
+/** Style index with the -1 tick rapid rule (player_ranged.rs2). */
+export const RAPID_STYLE_INDEX = 1;
+
+/** Server varp id for %com_mode, the 0-3 style index (transmit=yes). */
+export const COMBAT_MODE_VARP = 43;
 
 export function npcAttackRate(table: AttackRateTable, typeId: number): number {
     return table.npc[String(typeId)] ?? table.defaultRate;
@@ -51,6 +62,11 @@ export function npcAttackRate(table: AttackRateTable, typeId: number): number {
 
 export function weaponAttackRate(table: AttackRateTable, objId: number): number {
     return table.weapon[String(objId)] ?? table.defaultRate;
+}
+
+/** True when the worn weapon attacks rapid at style index 1. */
+export function isRapidWeapon(table: AttackRateTable, objId: number): boolean {
+    return table.rapid.includes(objId);
 }
 
 export interface ScreenPoint {

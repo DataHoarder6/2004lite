@@ -49,6 +49,12 @@ export interface ClientState {
      * Null when unarmed: the server falls back to attackrate 4.
      */
     wornWeaponId(): number | null;
+    /**
+     * Server combat-style index (%com_mode, varp 43), 0-3 within the worn
+     * weapon's category. No facade decoding: pair with the attackrate
+     * snapshot's rapid list (ADR-0011).
+     */
+    combatMode(): number;
     /** Visible combat entities (local player + NPCs + players), freshest cycle. */
     combatEntities(): CombatEntity[];
     /** The local player entity, null outside the game world. */

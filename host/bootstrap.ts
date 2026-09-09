@@ -372,6 +372,7 @@ export class Host {
             cameraPitch: () => latest()?.camera.pitch ?? 128,
             setCameraPitch: (pitch: number) => latest()?.setCameraPitch(pitch) ?? false,
             wornWeaponId: () => latest()?.wornWeaponId ?? null,
+            combatMode: () => latest()?.combatMode ?? 0,
             combatEntities: () => latest()?.entities.map(toCombatEntity) ?? [],
             localPlayer: () => {
                 const entities = latest()?.entities ?? [];

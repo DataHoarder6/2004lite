@@ -16,6 +16,7 @@ function state(overrides: Partial<HostClientState> = {}): HostClientState {
         chat: [],
         entities: [],
         wornWeaponId: null,
+        combatMode: 0,
         setCameraPitch: () => false,
         readInventory: () => null,
         readObjDef: () => null,
