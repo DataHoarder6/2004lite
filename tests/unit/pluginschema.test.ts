@@ -24,6 +24,10 @@ import cameraZoom from '../../plugins/camera-zoom/src/index.js';
 import cameraZoomManifest from '../../plugins/camera-zoom/manifest.json';
 import xpTracker from '../../plugins/xp-tracker/src/index.js';
 import xpTrackerManifest from '../../plugins/xp-tracker/manifest.json';
+import sideTabs from '../../plugins/side-tabs/src/index.js';
+import sideTabsManifest from '../../plugins/side-tabs/manifest.json';
+import thickSkin from '../../plugins/thick-skin/src/index.js';
+import thickSkinManifest from '../../plugins/thick-skin/manifest.json';
 
 const PLUGINS: { plugin: Plugin; manifest: PluginManifest }[] = [
     { plugin: attackTimer, manifest: attackTimerManifest as PluginManifest },
@@ -32,7 +36,9 @@ const PLUGINS: { plugin: Plugin; manifest: PluginManifest }[] = [
     { plugin: menuSwapper, manifest: menuSwapperManifest as PluginManifest },
     { plugin: inventoryValue, manifest: inventoryValueManifest as PluginManifest },
     { plugin: cameraZoom, manifest: cameraZoomManifest as PluginManifest },
-    { plugin: xpTracker, manifest: xpTrackerManifest as PluginManifest }
+    { plugin: xpTracker, manifest: xpTrackerManifest as PluginManifest },
+    { plugin: sideTabs, manifest: sideTabsManifest as PluginManifest },
+    { plugin: thickSkin, manifest: thickSkinManifest as PluginManifest }
 ];
 
 function startCapture(plugin: Plugin, manifest: PluginManifest): ConfigSchema | null {
@@ -41,9 +47,10 @@ function startCapture(plugin: Plugin, manifest: PluginManifest): ConfigSchema | 
     const ctx = {
         manifest,
         events,
+        hotkeys: { on: (): void => {}, off: (): void => {} },
         // Start-time client surface some plugins touch (handlers run live).
         client: { setCameraPitch: (): boolean => true, loopCycle: 0 },
-        config: { get: (): boolean => false, set: (): boolean => false },
+        config: { get: (): string => '', set: (): boolean => false },
         declareConfig: (declared: Omit<ConfigSchema, 'pluginId'>) => {
             schema = { pluginId: manifest.id, fields: declared.fields };
             return ctx.config;

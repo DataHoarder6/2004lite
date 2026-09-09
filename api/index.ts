@@ -8,6 +8,7 @@ export * from './types.js';
 export * from './combat.js';
 export * from './swaprules.js';
 export * from './events.js';
+export * from './hotkeys.js';
 export * from './config.js';
 export * from './overlay.js';
 export * from './plugin.js';

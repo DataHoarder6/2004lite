@@ -13,6 +13,7 @@ import { PluginConfig } from './config.js';
 import { StateDiffer } from './differ.js';
 import { SettingsPanel } from './panel.js';
 import type { PluginContext, PluginManifest } from '#api/plugin.js';
+import type { HotkeyHandler } from '#api/hotkeys.js';
 import type { Overlay } from '#api/overlay.js';
 import type { ConfigField } from '#api/config.js';
 import type { Inventory } from '#api/types.js';
@@ -57,6 +58,8 @@ export class Host {
     private readonly capture: MenuCapture;
     private lastState: HostClientState | null = null;
     private lastInventoryEvent: Inventory | null = null;
+    /** Named-key hotkey subscriptions per plugin id (dropped on disable). */
+    private readonly hotkeys = new Map<string, { key: string; handler: HotkeyHandler }[]>();
     /** Latest swapper-view options + capture labels (debug/e2e observability). */
     private lastMenuOptions: string[] = [];
     /** Last published server-tick index (wall-clock, 600ms boundaries). */
@@ -125,7 +128,42 @@ export class Host {
         ClientHooks.onDrawOverlays((ctx: DrawOverlaysContext) => this.onDraw(ctx));
         ClientHooks.onMinimenu((ctx: MinimenuContext) => this.onMenu(ctx));
         ClientHooks.onMenuClick(index => this.capture.clickConsumed(index));
+        window.addEventListener('keydown', this.onHotkey);
     }
+
+    /**
+     * Plugin hotkey dispatch (observe-only, ADR-0005). Skipped while logged
+     * out, while typing, or when focus sits in a DOM field (panel inputs):
+     * Tab especially must keep working for login fields and chat.
+     */
+    private onHotkey = (event: KeyboardEvent): void => {
+        const target = event.target as HTMLElement | null;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {
+            return;
+        }
+        const state = this.lastState;
+        if (!state?.ingame || state.typing) {
+            return;
+        }
+        for (const [pluginId, subs] of this.hotkeys) {
+            const loaded = this.registry.get(pluginId);
+            if (!loaded?.enabled) {
+                continue;
+            }
+            for (const sub of subs) {
+                if (sub.key !== event.key) {
+                    continue;
+                }
+                event.preventDefault();
+                try {
+                    sub.handler({ key: event.key });
+                } catch (error) {
+                    this.registry.fail(loaded, error);
+                    this.panel.render(this.registry.all());
+                }
+            }
+        }
+    };
 
     private async loadPlugins(): Promise<void> {
         const ids = await this.registry.loadIndex(this.baseUrl);
@@ -255,6 +293,7 @@ export class Host {
             }
             this.busViews.delete(pluginId);
         }
+        this.hotkeys.delete(pluginId);
         this.overlays.delete(pluginId);
         this.menuSwappers.delete(pluginId);
     }
@@ -266,6 +305,7 @@ export class Host {
         return {
             manifest,
             events: this.busView(manifest.id),
+            hotkeys: this.hotkeyView(manifest.id),
             client: this.clientView(),
             config,
             declareConfig: (schema: { fields: ConfigField[] }) => {
@@ -379,6 +419,8 @@ export class Host {
             recentChat: (_max: number) => [] as import('#api/types.js').ChatMessage[],
             cameraPitch: () => latest()?.camera.pitch ?? 128,
             setCameraPitch: (pitch: number) => latest()?.setCameraPitch(pitch) ?? false,
+            setSideTab: (index: number) => latest()?.setSideTab(index) ?? false,
+            pressToggleButton: (comId: number) => latest()?.pressToggleButton(comId) ?? false,
             wornWeaponId: () => latest()?.wornWeaponId ?? null,
             combatMode: () => latest()?.combatMode ?? 0,
             combatEntities: () => latest()?.entities.map(toCombatEntity) ?? [],
@@ -388,6 +430,29 @@ export class Host {
                 return local ? toCombatEntity(local) : null;
             },
             worldToScreen: (x: number, z: number, height: number) => latest()?.projectToScreen(x, z, height) ?? null
+        };
+    }
+
+    /** Hotkey view: subscriptions tagged by plugin id so disable drops them. */
+    private hotkeyView(pluginId: string): import('#api/hotkeys.js').HotkeyBus {
+        return {
+            on: (key: string, handler: HotkeyHandler) => {
+                let list = this.hotkeys.get(pluginId);
+                if (!list) {
+                    list = [];
+                    this.hotkeys.set(pluginId, list);
+                }
+                list.push({ key, handler });
+            },
+            off: (key: string, handler: HotkeyHandler) => {
+                const list = this.hotkeys.get(pluginId);
+                if (list) {
+                    const at = list.findIndex(sub => sub.key === key && sub.handler === handler);
+                    if (at !== -1) {
+                        list.splice(at, 1);
+                    }
+                }
+            }
         };
     }
 

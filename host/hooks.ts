@@ -73,6 +73,18 @@ export interface HostClientState {
     };
     chat: HostChatLine[];
     entities: HostCombatEntity[];
+    /** True while the player is typing (chatbox text or a modal input). */
+    typing: boolean;
+    /**
+     * Switch the side-panel tab (0-12). Client-local, no packet — the same
+     * flags the icon row sets. False for empty slots.
+     */
+    setSideTab(index: number): boolean;
+    /**
+     * Press a toggle-button component (TOGGLE_BUTTON path: packet + instant
+     * local varp flip). False when logged out or the com is no toggle.
+     */
+    pressToggleButton(comId: number): boolean;
     /**
      * Worn right-hand obj id (local player's appearance slot 3,
      * 0x200+objId when a weapon is worn). Null when unarmed: the server

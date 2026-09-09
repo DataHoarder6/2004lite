@@ -89,3 +89,16 @@ _Avoid_: blacklist, ignore list
 **Alch Value**: Coin value derived from shop `cost`: high `floor(cost*6/10)`,
 low `floor(cost*4/10)`, min 1, plus the content `is_alchable` blocklist.
 _Avoid_: price, GE value (no GE in 2004)
+
+**Upstream Packet**: Server-to-client traffic (naming relative to the player:
+flowing down to the client). Qualified — bare "Upstream" still means
+Client-TS, the code ancestor.
+_Avoid_: incoming (ambiguous in host code that also handles DOM events)
+
+**Downstream Packet**: Client-to-server traffic.
+_Avoid_: outgoing (same ambiguity as incoming)
+
+**Observer**: A read-only packet tap: parsed upstream/downstream packets
+surfaced for debugging, never sent, synthesized, or gated on by gameplay
+logic (ADR-0014 exception to the ADR-0005 raw-packet ban).
+_Avoid_: sniffer (implies interception), raw-packet API

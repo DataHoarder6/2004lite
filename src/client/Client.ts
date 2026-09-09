@@ -12051,6 +12051,38 @@ export class Client extends GameShell {
             },
             chat: this.hostChatLines(),
             entities: this.hostCombatEntities(),
+            //2004lite: typing state so plugin hotkeys don't hijack chat.
+            typing: this.chatInput !== '' || this.dialogInputOpen,
+            //2004lite: side-tab switch for plugins (ADR-0005 typed action).
+            // Client-local, no packet: the same flags the icon row sets.
+            setSideTab: (index: number): boolean => {
+                if (index < 0 || index > 12 || this.sideIcon[index] === -1) {
+                    return false;
+                }
+                this.redrawSide = true;
+                this.activeIcon = index;
+                this.redrawIcons = true;
+                return true;
+            },
+            //2004lite: toggle-button press for plugins (ADR-0005 typed
+            // action). Replicates the TOGGLE_BUTTON path exactly; rejects
+            // non-toggle coms and logs-out state instead of crashing.
+            pressToggleButton: (comId: number): boolean => {
+                if (!this.ingame || !this.out) {
+                    return false;
+                }
+                const com: IfType = IfType.list[comId];
+                if (!com || !com.scripts || com.scripts[0]?.[0] !== 5) {
+                    return false;
+                }
+                this.out.p1Enc(ClientProt.IF_BUTTON);
+                this.out.p2(comId);
+                const varp: number = com.scripts[0][1];
+                this.var[varp] = 1 - this.var[varp];
+                this.clientVar(varp);
+                this.redrawSide = true;
+                return true;
+            },
             //2004lite: wall-clock server-tick index (600ms). The client runs
             // ~50 frames/s; countdown plugins key off this, never loopCycle.
             tick: Math.floor(performance.now() / 600),

@@ -2,6 +2,7 @@
 
 import type { ConfigSchema, ConfigStore } from './config.js';
 import type { EventBus } from './events.js';
+import type { HotkeyBus } from './hotkeys.js';
 import type { Overlay } from './overlay.js';
 import type { ChatMessage, GroundItem, GroundProjection, Inventory, MapPosition, MenuEntry, SkillSnapshot } from './types.js';
 import type { CombatEntity, ScreenPoint } from './combat.js';
@@ -44,6 +45,18 @@ export interface ClientState {
     cameraPitch(): number;
     /** Benign client-local write (ADR-0005): clamp-range camera pitch. */
     setCameraPitch(pitch: number): boolean;
+    /**
+     * Switch the side-panel tab (0-12, standard order: 3 inventory,
+     * 4 equipment, 1 stats, 5 prayer...). Client-local, no packet — the
+     * same state the icon row click path sets. False for empty slots.
+     */
+    setSideTab(index: number): boolean;
+    /**
+     * Press a toggle-button interface component (e.g. a prayer icon).
+     * Replicates the client's TOGGLE_BUTTON path exactly (packet + instant
+     * local varp flip); rejects non-toggle coms. False when invalid.
+     */
+    pressToggleButton(comId: number): boolean;
     /**
      * Worn right-hand obj id for weapon attack-rate lookup (ADR-0011).
      * Null when unarmed: the server falls back to attackrate 4.
@@ -90,6 +103,8 @@ export interface MenuSwapView {
 export interface PluginContext {
     manifest: PluginManifest;
     events: EventBus;
+    /** Named-key hotkeys (host->plugin observe-only, ADR-0005). */
+    hotkeys: HotkeyBus;
     config: ConfigStore;
     /** Live client state view (read + benign local writes, ADR-0005). */
     client: ClientState;

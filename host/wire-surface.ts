@@ -24,6 +24,7 @@ export const WIRE_SURFACE: string[] = [
     // PluginContext
     'manifest',
     'events',
+    'hotkeys',
     'config',
     'client',
     'declareConfig',
@@ -54,6 +55,8 @@ export const WIRE_SURFACE: string[] = [
     'recentChat',
     'cameraPitch',
     'setCameraPitch',
+    'setSideTab',
+    'pressToggleButton',
     'wornWeaponId',
     'combatMode',
     'tick',
