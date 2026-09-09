@@ -5,10 +5,11 @@
 import { definePlugin } from '#api/plugin.js';
 
 /**
- * Thick Skin button com in the prayer tab (build 274). Discovered live by
- * clicking the icon (first row, leftmost); prayer0 varp mirrors the state.
+ * Thick Skin button com in the prayer tab (build 274): 5609, the first comp
+ * after the prayer interface (5608), verified via the server's own
+ * Component.getId('prayer:prayer_thickskin'). Prayer0 varp (83) mirrors it.
  */
-const THICK_SKIN_COMID = 5618;
+const THICK_SKIN_COMID = 5609;
 
 const ALLOWED_KEYS = ['Tab', 'Escape', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'];
 
