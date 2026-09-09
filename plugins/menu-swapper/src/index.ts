@@ -1,63 +1,50 @@
-// Menu Entry Swapper: exercises the menu mutation capability (ADR-0005,
-// swap-only). Config-driven rules: promote a chosen option above another for
-// NPC interactions. Classic 2004 QoL: "Bank" above "Talk-to".
+// Menu Entry Swapper: RuneLite-parity swaps for the 2004 interaction set
+// (ADR-0011). Preset toggles cover NPC/object/item/bank/shift cases; per-entry
+// custom left/shift-click swaps persist as `custom-rules` text (panel-editable,
+// import/export by copy-paste) and are captured in-game with shift+right-click
+// (host chrome rows, never plugin-visible). Swap-only throughout (ADR-0005).
 
 import { definePlugin } from '#api/plugin.js';
 import type { MenuSwapView } from '#api/plugin.js';
+import { CUSTOM_RULES_KEY } from '#api/swaprules.js';
+import { applySwaps } from './rules.js';
 
 export default definePlugin(ctx => {
     const config = ctx.declareConfig({
         fields: [
+            { key: 'npc-bank', label: 'Bankers: Bank first', type: 'boolean', default: true },
+            { key: 'npc-trade', label: 'Shops: Trade first', type: 'boolean', default: true },
+            { key: 'npc-travel', label: 'Travel: sail/fare first', type: 'boolean', default: true },
+            { key: 'npc-attack', label: 'NPCs: Attack first', type: 'boolean', default: false, description: 'Promotes Attack above Talk-to/Pickpocket' },
+            { key: 'loc-bank', label: 'Bank booths: Bank first', type: 'boolean', default: true },
+            { key: 'loc-open', label: 'Doors: Open first', type: 'boolean', default: true },
             {
-                key: 'enabled-rules',
-                label: 'Enable swap rules',
-                type: 'boolean',
-                default: true
+                key: 'stairs-mode',
+                label: 'Stairs climb mode',
+                type: 'enum',
+                default: 'off',
+                options: ['off', 'up', 'down'],
+                description: 'Left-click stairs climb up/down'
             },
+            { key: 'item-eat', label: 'Food: Eat above Drop', type: 'boolean', default: true },
+            { key: 'item-bury', label: 'Bones: Bury above Drop', type: 'boolean', default: true },
+            { key: 'bank-shift', label: 'Shift: largest bank quantity', type: 'boolean', default: true },
+            { key: 'walk-deprioritize', label: 'Shift: Walk-here to bottom', type: 'boolean', default: true },
             {
-                key: 'promote',
-                label: 'Promote option (prefix match)',
+                key: CUSTOM_RULES_KEY,
+                label: 'Custom swaps (target => option)',
                 type: 'string',
-                default: 'Bank',
-                description: 'Option moved to the top of the NPC menu'
-            },
-            {
-                key: 'demote',
-                label: 'Above option (prefix match)',
-                type: 'string',
-                default: 'Talk-to',
-                description: 'The option "promote" swaps above'
+                default: '# one rule per line, e.g. banker => bank\n# shift variant: banker +shift => talk-to',
+                description: 'One rule per line (";" also separates). Shift+right-click in game to capture.'
             }
         ]
     });
 
     ctx.setMenuSwapper((view: MenuSwapView) => {
-        if (!config.get<boolean>('enabled-rules')) {
-            return;
-        }
-
-        const promote = config.get<string>('promote').toLowerCase();
-        const demote = config.get<string>('demote').toLowerCase();
-        if (!promote || !demote) {
-            return;
-        }
-
-        // find the promoted entry below a demoted entry within the NPC ops
-        // (client sorts priority actions last; we swap them across)
-        let demoteIndex = -1;
-        let promoteIndex = -1;
-        for (const entry of view.entries) {
-            const option = entry.option.toLowerCase();
-            if (demoteIndex === -1 && option.startsWith(demote)) {
-                demoteIndex = entry.index;
-            } else if (promoteIndex === -1 && option.startsWith(promote) && entry.index > 0) {
-                promoteIndex = entry.index;
-            }
-        }
-
-        if (demoteIndex > 0 && promoteIndex > demoteIndex) {
-            view.swap(promoteIndex, demoteIndex);
-        }
+        applySwaps(view, {
+            get: key => config.get(key),
+            getRulesText: () => config.get<string>(CUSTOM_RULES_KEY)
+        });
     });
 
     ctx.log('menu-swapper started');

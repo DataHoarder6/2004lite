@@ -33,15 +33,18 @@ Read [CONTEXT.md](./CONTEXT.md) for domain language before anything else.
 ## Map of docs
 
 - [CONTEXT.md](./CONTEXT.md) — glossary, the only place terms are defined
-- [docs/mvp.md](./docs/mvp.md) — MVP definition, build order, out-of-scope list
+- [docs/mvp.md](./docs/mvp.md) — MVP demo milestone (these plugins ship at full
+  scope per ADR-0011, not demo scope)
 - [docs/adr/](./docs/adr/) — decision records
+- [docs/plugins-spec.md](./docs/plugins-spec.md) — build spec: full swapper +
+  both attack timers
 
 ## Repo layout (target)
 
 - `src/` — upstream Client-TS 274, only marked instrumentation edits
 - `api/` — facade (versioned surface plugins code against)
 - `host/` — plugin runtime (loader, bus, config, overlays)
-- `plugins/` — MVP plugin sources (built to `$ENGINE_DIR/public/plugins/`)
+- `plugins/` — plugin sources (built to `$ENGINE_DIR/public/plugins/`)
 
 ## Gotchas
 
@@ -50,3 +53,7 @@ Read [CONTEXT.md](./CONTEXT.md) for domain language before anything else.
 - The page imports `./client/client.js` and calls `new Client(...)` directly —
   host must bootstrap inside the bundle, not the page.
 - Events flush after each game cycle, never mid-tick (ADR-0006, Q13 decision).
+- Server truth lives outside this repo: [Engine-TS](https://github.com/LostCityRS/Engine-TS)
+  (runtime, tick driver) + [Content](https://github.com/LostCityRS/Content)
+  (combat scripts, `attackrate` data). NPC/player attack cadence is
+  server-authoritative; the client cache carries no speed fields (ADR-0011).

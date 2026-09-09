@@ -35,13 +35,14 @@ for (const dir of fs.readdirSync(pluginsRoot)) {
     fs.rmSync(dist, { recursive: true, force: true });
     fs.mkdirSync(dist, { recursive: true });
 
+    // The facade (api/) is pure: types + stateless helpers. Bundle it into
+    // every plugin so artifacts are self-contained ESM (ADR-0002).
     const result = await Bun.build({
         entrypoints: [entry],
         outdir: dist,
         target: 'browser',
         format: 'esm',
-        minify: true,
-        external: ['*'] // plugins resolve the facade from the host at runtime
+        minify: true
     });
 
     if (!result.success) {

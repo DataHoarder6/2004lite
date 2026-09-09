@@ -68,6 +68,15 @@ export class PluginConfig implements ConfigStore {
         return { ...this.values };
     }
 
+    getRaw(key: string): boolean | number | string | undefined {
+        return this.values[key];
+    }
+
+    setRaw(key: string, value: boolean | number | string): void {
+        this.values[key] = value;
+        this.write();
+    }
+
     schema(): ConfigSchema {
         return { pluginId: this.pluginId, fields: this.schemaFields };
     }

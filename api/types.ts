@@ -46,6 +46,12 @@ export interface MenuEntry {
     paramA: number;
     paramB: number;
     paramC: number;
+    /** Decoded interaction target kind (npc, player, loc, obj, interface). */
+    targetKind: string;
+    /** Target display name stripped of color tags, '' when none. */
+    targetName: string;
+    /** True when the raw action carries the priority bit (>1000). */
+    isPriority: boolean;
 }
 
 /** One stack resting on a tile, as seen by the local player. */

@@ -17,6 +17,7 @@ export type PluginIndexEntry = Pick<PluginManifest, 'id' | 'name' | 'version' | 
 
 export class PluginRegistry {
     private loaded = new Map<string, LoadedPlugin>();
+    private failures: PluginLoadError[] = [];
 
     constructor(
         private readonly createContext: (manifest: PluginManifest) => PluginContext,
@@ -25,6 +26,11 @@ export class PluginRegistry {
 
     all(): LoadedPlugin[] {
         return [...this.loaded.values()];
+    }
+
+    /** Plugins that failed to load, with reasons (surfaced in the panel). */
+    loadFailures(): PluginLoadError[] {
+        return [...this.failures];
     }
 
     get(id: string): LoadedPlugin | undefined {
@@ -61,12 +67,16 @@ export class PluginRegistry {
             }
             manifest = parsePluginManifest(await res.json());
         } catch (error) {
-            console.warn(`[2004lite] plugin ${id}: bad manifest:`, error);
+            const reason = `bad manifest: ${message(error)}`;
+            this.failures.push({ id, reason });
+            console.warn(`[2004lite] plugin ${id}: ${reason}`, error);
             return null;
         }
 
         if (manifest.targetClientBuild !== TARGET_CLIENT_BUILD) {
-            console.warn(`[2004lite] plugin ${id}: targets build ${manifest.targetClientBuild}, host is ${TARGET_CLIENT_BUILD}; refusing`);
+            const reason = `targets build ${manifest.targetClientBuild}, host is ${TARGET_CLIENT_BUILD}`;
+            this.failures.push({ id, reason });
+            console.warn(`[2004lite] plugin ${id}: ${reason}; refusing`);
             return null;
         }
 
@@ -89,7 +99,9 @@ export class PluginRegistry {
             this.enable(loaded);
             return loaded;
         } catch (error) {
-            console.warn(`[2004lite] plugin ${id}: load failed:`, error);
+            const reason = `load failed: ${message(error)}`;
+            this.failures.push({ id, reason });
+            console.warn(`[2004lite] plugin ${id}: ${reason}`, error);
             return null;
         }
     }
@@ -150,6 +162,15 @@ export class PluginRegistry {
         }
         return loaded.enabled === enabled;
     }
+}
+
+export interface PluginLoadError {
+    id: string;
+    reason: string;
+}
+
+function message(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
 }
 
 // Manifest validation: plain function so plugin authors can reuse it.

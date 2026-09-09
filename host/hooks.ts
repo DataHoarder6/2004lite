@@ -22,6 +22,29 @@ export interface HostGroundStack {
     count: number;
 }
 
+export interface HostCombatHitsplat {
+    type: number;
+    value: number;
+    cycle: number;
+}
+
+export interface HostCombatEntity {
+    key: string;
+    kind: 'npc' | 'player';
+    slot: number;
+    typeId: number;
+    name: string;
+    health: number;
+    totalHealth: number;
+    primaryAnim: number;
+    faceEntity: number;
+    combatCycle: number;
+    x: number;
+    z: number;
+    height: number;
+    hitsplats: HostCombatHitsplat[];
+}
+
 export interface HostClientState {
     ingame: boolean;
     loopCycle: number;
@@ -36,6 +59,7 @@ export interface HostClientState {
         yaw: number;
     };
     chat: HostChatLine[];
+    entities: HostCombatEntity[];
     setCameraPitch(pitch: number): boolean;
     readInventory(comId: number): { ids: Int32Array; counts: Int32Array } | null;
     readObjDef(id: number): { name: string; cost: number } | null;
@@ -46,6 +70,7 @@ export interface HostClientState {
      * Reads live camera state, so overlays call it per-frame.
      */
     projectTile(tileX: number, tileZ: number, level: number, height: number): { x: number; y: number } | null;
+    projectToScreen(x: number, z: number, height: number): { x: number; y: number } | null;
 }
 
 export interface CycleEndContext {
@@ -74,17 +99,26 @@ export type MinimenuSwap = (i: number, j: number) => boolean;
 
 export interface MinimenuContext {
     entries: MinimenuEntry[];
+    /** Live shift state sampled at menu-build time (ADR-0011). */
+    isShiftDown: boolean;
     swap: MinimenuSwap;
+    /**
+     * Append a host-owned row (capture UX, ADR-0011). Inert CANCEL action;
+     * rebuilt every menu build. Returns the index, or -1 at capacity.
+     */
+    appendEntry: (option: string) => number;
 }
 
 type CycleEndHook = (ctx: CycleEndContext) => void;
 type DrawOverlaysHook = (ctx: DrawOverlaysContext) => void;
 type MinimenuHook = (ctx: MinimenuContext) => void;
+type MenuClickConsumer = (index: number) => boolean;
 
 export class ClientHooks {
     private static cycleEnd: CycleEndHook | null = null;
     private static drawOverlays: DrawOverlaysHook | null = null;
     private static minimenuMutate: MinimenuHook | null = null;
+    private static menuClick: MenuClickConsumer | null = null;
 
     static onCycleEnd(hook: CycleEndHook): void {
         this.cycleEnd = hook;
@@ -96,6 +130,16 @@ export class ClientHooks {
 
     static onMinimenu(hook: MinimenuHook): void {
         this.minimenuMutate = hook;
+    }
+
+    /** Host consumes clicks on its own capture rows (ADR-0011). */
+    static onMenuClick(consumer: MenuClickConsumer): void {
+        this.menuClick = consumer;
+    }
+
+    /** True when the host consumed the click (client must skip doAction). */
+    static consumeMenuClick(index: number): boolean {
+        return this.menuClick?.(index) ?? false;
     }
 
     static emitCycleEnd(ctx: CycleEndContext): void {

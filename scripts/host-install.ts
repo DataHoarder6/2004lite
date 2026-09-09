@@ -32,6 +32,8 @@ function sh(cmd: string[]): void {
 
 console.log('building client bundle…');
 sh(['bun', 'run', 'build']);
+console.log('checking wire surface…');
+sh(['bun', 'run', 'check:wire']);
 console.log('building plugins…');
 sh(['bun', 'run', 'plugins:build']);
 

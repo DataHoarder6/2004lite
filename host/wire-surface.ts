@@ -54,16 +54,42 @@ export const WIRE_SURFACE: string[] = [
     'recentChat',
     'cameraPitch',
     'setCameraPitch',
+    'combatEntities',
+    'localPlayer',
+    'worldToScreen',
+
+    // CombatEntity
+    'key',
+    'typeId',
+    'health',
+    'totalHealth',
+    'primaryAnim',
+    'faceEntity',
+    'combatCycle',
+    'x',
+    'z',
+    'y',
+    'height',
+
+    // Combat events
+    'entity',
+    'animId',
+    'hitsplat',
+    'targetKey',
 
     // MenuSwapView + entries
     'entries',
     'swap',
+    'isShiftDown',
     'index',
     'option',
     'action',
     'paramA',
     'paramB',
     'paramC',
+    'targetKind',
+    'targetName',
+    'isPriority',
 
     // Facade events
     'kind',
@@ -79,15 +105,12 @@ export const WIRE_SURFACE: string[] = [
     'ground-item-quantity',
 
     // Ground items
-    'key',
     'qty',
     'level',
     'highAlch',
     'lowAlch',
     'firstSeenCycle',
     'revealed',
-    'x',
-    'y',
 
     // Value types
     'xp',
@@ -123,6 +146,8 @@ export const WIRE_SURFACE: string[] = [
     'options',
     'get',
     'set',
+    'getRaw',
+    'setRaw',
     'all',
 
     // __lite4 debug handle

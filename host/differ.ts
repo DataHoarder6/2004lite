@@ -2,10 +2,11 @@
 // snapshots. Poll-diff, not packet taps — fewer upstream edits, and it can't
 // desync from the client's own post-processing (ADR-0001 rationale).
 
-import type { HostChatLine, HostClientState } from './hooks.js';
+import type { HostChatLine, HostClientState, HostCombatEntity } from './hooks.js';
 import type { FacadeEvent } from '#api/events.js';
 import { SKILL_NAMES, SKILL_USED } from './skills.js';
 import type { ChatMessage, ChatType, GroundItem, Inventory, InventoryItem, SkillSnapshot } from '#api/types.js';
+import type { CombatEntity } from '#api/combat.js';
 
 const CHAT_WINDOW = 10;
 
@@ -41,6 +42,7 @@ export class StateDiffer {
     private watchedInventories = new Set<number>();
     private groundSeen = new Map<string, { qty: number; firstSeenCycle: number }>();
     private groundCache: GroundItem[] = [];
+    private lastEntities = new Map<string, { primaryAnim: number; faceEntity: number; hitCycle: number }>();
 
     snapshot(state: HostClientState): FacadeEvent[] {
         const events: FacadeEvent[] = [];
@@ -80,6 +82,7 @@ export class StateDiffer {
         events.push(...this.diffChat(state.chat));
         events.push(...this.diffInventories(state));
         events.push(...this.diffGround(state));
+        events.push(...this.diffEntities(state));
 
         this.lastXp = state.statXP.slice();
         this.lastLevels = state.statEffectiveLevel.slice();
@@ -140,7 +143,6 @@ export class StateDiffer {
     watchInventory(comId: number): void {
         this.watchedInventories.add(comId);
     }
-
     private diffInventories(state: HostClientState): FacadeEvent[] {
         const events: FacadeEvent[] = [];
         for (const comId of this.watchedInventories) {
@@ -162,6 +164,56 @@ export class StateDiffer {
         return events;
     }
 
+    /**
+     * Combat diff: anim starts, new hitsplats, and facing-target changes per
+     * entity. New entities baseline silently (no burst on login/area load).
+     */
+    private diffEntities(state: HostClientState): FacadeEvent[] {
+        const events: FacadeEvent[] = [];
+        const seen = new Set<string>();
+        for (const raw of state.entities ?? []) {
+            seen.add(raw.key);
+            const entity: CombatEntity = {
+                key: raw.key,
+                kind: raw.kind,
+                slot: raw.slot,
+                typeId: raw.typeId,
+                name: raw.name,
+                health: raw.health,
+                totalHealth: raw.totalHealth,
+                primaryAnim: raw.primaryAnim,
+                faceEntity: raw.faceEntity,
+                combatCycle: raw.combatCycle,
+                x: raw.x,
+                z: raw.z,
+                height: raw.height
+            };
+            const prev = this.lastEntities.get(raw.key);
+            if (!prev) {
+                this.lastEntities.set(raw.key, { primaryAnim: raw.primaryAnim, faceEntity: raw.faceEntity, hitCycle: maxHitCycle(raw) });
+                continue;
+            }
+            if (raw.primaryAnim !== prev.primaryAnim && raw.primaryAnim !== -1) {
+                events.push({ kind: 'anim-started', entity, animId: raw.primaryAnim, loopCycle: state.loopCycle });
+            }
+            for (const hit of raw.hitsplats) {
+                if (hit.cycle > prev.hitCycle) {
+                    events.push({ kind: 'hitsplat', entity, hitsplat: { type: hit.type, value: hit.value, cycle: hit.cycle }, loopCycle: state.loopCycle });
+                }
+            }
+            if (raw.faceEntity !== prev.faceEntity) {
+                events.push({ kind: 'target-changed', entity, targetKey: faceEntityKey(raw.faceEntity), loopCycle: state.loopCycle });
+            }
+            this.lastEntities.set(raw.key, { primaryAnim: raw.primaryAnim, faceEntity: raw.faceEntity, hitCycle: Math.max(prev.hitCycle, maxHitCycle(raw)) });
+        }
+        for (const key of [...this.lastEntities.keys()]) {
+            if (!seen.has(key)) {
+                this.lastEntities.delete(key);
+            }
+        }
+        return events;
+    }
+
     reset(): void {
         this.lastXp = null;
         this.lastLevels = null;
@@ -171,6 +223,7 @@ export class StateDiffer {
         this.lastChatWindow = [];
         this.groundSeen.clear();
         this.groundCache = [];
+        this.lastEntities.clear();
     }
 
     /** Latest enriched ground items (first-seen ticks attached). */
@@ -254,6 +307,27 @@ function toSkill(index: number, state: HostClientState): SkillSnapshot {
         baseLevel: state.statBaseLevel[index],
         effectiveLevel: state.statEffectiveLevel[index]
     };
+}
+
+/** Client faceEntity encoding: <32768 = npc slot, else player slot + 32768. */
+function faceEntityKey(faceEntity: number): string | null {
+    if (faceEntity === -1) {
+        return null;
+    }
+    if (faceEntity < 32768) {
+        return `npc:${faceEntity}`;
+    }
+    return `player:${faceEntity - 32768}`;
+}
+
+function maxHitCycle(raw: HostCombatEntity): number {
+    let max = -1;
+    for (const hit of raw.hitsplats) {
+        if (hit.cycle > max) {
+            max = hit.cycle;
+        }
+    }
+    return max;
 }
 
 export { SKILL_NAMES, SKILL_USED };

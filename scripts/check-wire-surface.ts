@@ -9,8 +9,10 @@ const bundle = fs.readFileSync('out/client.js', 'utf-8');
 
 const missing: string[] = [];
 for (const name of new Set(WIRE_SURFACE)) {
-    // property access (.name), definition ({name, or {name:) or key ("name")
-    const pattern = new RegExp(`[.{:,"'\\s]${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=[^\\w$])`);
+    // property access (.name), definition ({name, }name, or }name in minified
+    // classes) or key ("name"). The } alternative matters: methods nothing in
+    // the client bundle calls only occur as `}name(` definitions.
+    const pattern = new RegExp(`[.{:},"'\\s}]${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=[^\\w$])`);
     if (!pattern.test(bundle)) {
         missing.push(name);
     }
