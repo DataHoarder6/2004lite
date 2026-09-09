@@ -1262,7 +1262,6 @@ export class Client extends GameShell {
         }
 
         Client.loopCycle++;
-
         if (!this.ingame) {
             await this.titleScreenLoop();
         } else {
@@ -12045,6 +12044,9 @@ export class Client extends GameShell {
             },
             chat: this.hostChatLines(),
             entities: this.hostCombatEntities(),
+            //2004lite: wall-clock server-tick index (600ms). The client runs
+            // ~50 frames/s; countdown plugins key off this, never loopCycle.
+            tick: Math.floor(performance.now() / 600),
             //2004lite: drained reveal records (see OBJ_REVEAL site). hostState
             // runs once per tick at cycle end, so drain-per-read is exact.
             revealed: this.hostRevealed.splice(0),

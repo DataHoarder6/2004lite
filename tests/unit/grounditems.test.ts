@@ -9,6 +9,7 @@ function state(overrides: Partial<HostClientState> = {}): HostClientState {
     return {
         ingame: true,
         loopCycle: 10,
+        tick: 10,
         statXP: new Int32Array(25),
         statBaseLevel: new Int32Array(25),
         statEffectiveLevel: new Int32Array(25),

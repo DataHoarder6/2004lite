@@ -56,6 +56,11 @@ export interface HostCombatEntity {
 export interface HostClientState {
     ingame: boolean;
     loopCycle: number;
+    /**
+     * Wall-clock server-tick index (600ms boundaries). The client runs ~50
+     * frames/s; countdown logic keys off this, never loopCycle (ADR-0006).
+     */
+    tick: number;
     statXP: Int32Array;
     statBaseLevel: Int32Array;
     statEffectiveLevel: Int32Array;

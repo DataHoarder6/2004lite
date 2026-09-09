@@ -10,11 +10,11 @@ import type { CombatEntity } from '#api/combat.js';
 
 const CHAT_WINDOW = 10;
 
-/** Stat packets settle within a tick or two of login; 10 cycles (6s) is ample. */
-const LOGIN_SETTLE_CYCLES = 10;
+/** Stat packets settle within a tick or two of login; 2 server ticks is ample. */
+const LOGIN_SETTLE_TICKS = 2;
 
 /** Reveal records that never match a sighting expire (stale tile reuse). */
-const REVEAL_TTL_CYCLES = 10;
+const REVEAL_TTL_TICKS = 10;
 
 /** Client chat-type code -> facade ChatType. */
 const CHAT_TYPE_MAP: Record<number, ChatType> = {
@@ -52,12 +52,12 @@ export class StateDiffer {
     private revealedKeys = new Map<string, number>();
     private lastEntities = new Map<string, { primaryAnim: number; faceEntity: number; hitCycle: number }>();
     /**
-     * loopCycle of the first in-game snapshot after a reset. Stat packets
-     * arrive staged over the first cycles after login, so 0 -> X fills must
-     * not emit xp-gained until the settle window passes (else login shows a
-     * burst as if all XP was just earned).
+     * Server tick of the first in-game snapshot after a reset. Stat packets
+     * arrive staged over the first ticks after login, so fills must not emit
+     * xp-gained until the settle window passes (else login shows a burst as
+     * if all XP was just earned).
      */
-    private loginCycle: number | null = null;
+    private loginTick: number | null = null;
 
     snapshot(state: HostClientState): FacadeEvent[] {
         const events: FacadeEvent[] = [];
@@ -67,10 +67,10 @@ export class StateDiffer {
             return events;
         }
 
-        if (this.loginCycle === null) {
-            this.loginCycle = state.loopCycle;
+        if (this.loginTick === null) {
+            this.loginTick = state.tick;
         }
-        const settled = state.loopCycle - this.loginCycle >= LOGIN_SETTLE_CYCLES;
+        const settled = state.tick - this.loginTick >= LOGIN_SETTLE_TICKS;
 
         // XP + level diffs
         if (this.lastXp && this.lastXp.length === state.statXP.length) {
@@ -244,7 +244,7 @@ export class StateDiffer {
         this.groundSeen.clear();
         this.groundCache = [];
         this.lastEntities.clear();
-        this.loginCycle = null;
+        this.loginTick = null;
         this.revealedKeys.clear();
     }
 
@@ -265,10 +265,10 @@ export class StateDiffer {
         const items: GroundItem[] = [];
 
         for (const record of state.revealed ?? []) {
-            this.revealedKeys.set(`${record.level}/${record.tileX}/${record.tileZ}/${record.id}`, state.loopCycle);
+            this.revealedKeys.set(`${record.level}/${record.tileX}/${record.tileZ}/${record.id}`, state.tick);
         }
         for (const [key, at] of [...this.revealedKeys]) {
-            if (state.loopCycle - at > REVEAL_TTL_CYCLES) {
+            if (state.tick - at > REVEAL_TTL_TICKS) {
                 this.revealedKeys.delete(key);
             }
         }

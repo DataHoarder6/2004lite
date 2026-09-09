@@ -56,6 +56,7 @@ export const WIRE_SURFACE: string[] = [
     'setCameraPitch',
     'wornWeaponId',
     'combatMode',
+    'tick',
     'combatEntities',
     'localPlayer',
     'worldToScreen',
@@ -160,5 +161,7 @@ export const WIRE_SURFACE: string[] = [
     'objDef',
     'inventory',
     'menu',
-    'capture'
+    'capture',
+    'combat',
+    'local'
 ];

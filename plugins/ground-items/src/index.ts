@@ -189,11 +189,13 @@ export default definePlugin(ctx => {
     /** Projected tile corners for the highlight quad; null at area edges. */
     function tileCorners(tileX: number, tileZ: number, level: number): { x: number; y: number }[] | null {
         const corners: { x: number; y: number }[] = [];
+        // projectTile centers on the tile, so edges sit at half-tile
+        // offsets; whole-tile offsets land on neighbouring centers.
         const offsets = [
-            [0, 0],
-            [1, 0],
-            [1, 1],
-            [0, 1]
+            [-0.5, -0.5],
+            [0.5, -0.5],
+            [0.5, 0.5],
+            [-0.5, 0.5]
         ];
         for (const [dx, dz] of offsets) {
             const point = ctx.client.projectTile(tileX + dx, tileZ + dz, level, 1);

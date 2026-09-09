@@ -3,15 +3,18 @@
 // server attackrate snapshot (data/attackrates.json): worn-weapon rate via
 // ClientState.wornWeaponId, rapid style read from the client (%com_mode varp
 // + rapid snapshot, never user-specified), normal-food eats +3 hardcoded
-// (Content consume.rs2). Countdown ticks on facade `cycle` events.
+// (Content consume.rs2). Countdown advances on facade `tick` (server ticks,
+// 600ms) — never `cycle` (~50Hz client frames).
 //
-// v1 limits (documented, not silent): any local anim while engaged resets the
-// clock (no attack-anim allowlist like upstream's blocklist); eat detection
-// is inventory-consumption based, so dropping food mid-fight also adds delay.
+// Engagement is damage-gated: facing alone never starts the clock (talking,
+// pickpocketing and emoting at NPCs stay silent). The first observed damage
+// primes it; subsequent local swings resync the exact phase. v1 limit: any
+// local anim while active resyncs (no attack-anim allowlist yet), so emoting
+// mid-fight restarts the countdown early.
 
 import { definePlugin } from '#api/plugin.js';
 import { INVENTORY_COMID } from '#api/types.js';
-import type { AnimStartedEvent, InventoryChangedEvent } from '#api/events.js';
+import type { AnimStartedEvent, HitsplatEvent, InventoryChangedEvent, TickEvent } from '#api/events.js';
 import { RAPID_STYLE_INDEX, isRapidWeapon, weaponAttackRate, type AttackRateTable } from '#api/combat.js';
 import tableJson from '../../../data/attackrates.json';
 import { AttackClock, RapidRule } from './clock.js';
@@ -26,6 +29,12 @@ const TABLE = tableJson as AttackRateTable;
  */
 const EAT_DELAY_TICKS = 3;
 
+/** Ticks without a swing or damage before an active clock stands down. */
+const IDLE_STAND_DOWN_TICKS = 8;
+
+/** Catch-up cap per tick event (background-tab frame gaps). */
+const MAX_CATCH_UP = 10;
+
 const BAR_W = 36;
 const BAR_H = 4;
 // Fixed-mode viewport: overlay pixels outside it smear over static UI
@@ -34,10 +43,6 @@ const VIEW_X = 4;
 const VIEW_Y = 4;
 const VIEW_W = 512;
 const VIEW_H = 334;
-const COLOR_READY = '#00ff00';
-const COLOR_COUNT = '#ffffff';
-const COLOR_BAR = '#ffff00';
-const COLOR_BAR_BG = 'rgba(0,0,0,0.6)';
 
 export default definePlugin(ctx => {
     const config = ctx.declareConfig({
@@ -59,7 +64,9 @@ export default definePlugin(ctx => {
 
     const clock = new AttackClock();
     let lastPeriod = TABLE.defaultRate;
-    let suppressLoopCycle = -1000;
+    let lastTick = -1;
+    let lastActionTick = -1;
+    let suppressTick = -1;
     let lastInv = new Map<number, { id: number; count: number }>();
 
     function resolvePeriod(): number {
@@ -78,35 +85,62 @@ export default definePlugin(ctx => {
         return new RapidRule(rapid).adjust(weaponAttackRate(TABLE, worn));
     }
 
-    ctx.events.on('cycle', () => {
+    ctx.events.on('tick', (event: TickEvent) => {
         if (!ctx.client.ingame) {
             clock.onReset();
             lastInv.clear();
+            lastTick = event.tick;
             return;
         }
+        if (lastTick === -1) {
+            lastTick = event.tick;
+        }
+        let catchUp = Math.min(event.tick - lastTick, MAX_CATCH_UP);
+        lastTick = event.tick;
         lastPeriod = resolvePeriod();
         clock.setPeriod(lastPeriod);
-        const local = ctx.client.localPlayer();
-        const engaged = local !== null && local.faceEntity !== -1;
-        if (engaged && clock.current === 'NOT_ATTACKING') {
-            clock.onEngage();
-        } else if (!engaged && clock.current !== 'NOT_ATTACKING') {
+        while (catchUp-- > 0) {
+            clock.onTick();
+        }
+        const face = ctx.client.localPlayer()?.faceEntity ?? -1;
+        if (clock.current !== 'NOT_ATTACKING' && (face === -1 || event.tick - lastActionTick > IDLE_STAND_DOWN_TICKS)) {
             clock.onDisengage();
         }
-        clock.onTick();
     });
 
     ctx.events.on('anim-started', (event: AnimStartedEvent) => {
         const local = ctx.client.localPlayer();
-        if (!local || event.entity.key !== local.key || clock.current === 'NOT_ATTACKING') {
+        if (!local || event.entity.key !== local.key || local.faceEntity === -1) {
             return;
         }
-        // Eat anim lands the same cycle as its inventory consumption: the
-        // consumption handler already added the delay, don't reset the clock.
-        if (event.loopCycle - suppressLoopCycle <= 1) {
+        // Eat anim lands the same server tick as its inventory consumption:
+        // the consumption handler already added the delay, don't resync.
+        if (lastTick === suppressTick) {
             return;
         }
-        clock.onAttackAnim();
+        lastActionTick = lastTick;
+        if (clock.current !== 'NOT_ATTACKING') {
+            clock.onAttackAnim();
+        }
+    });
+
+    ctx.events.on('hitsplat', (event: HitsplatEvent) => {
+        const local = ctx.client.localPlayer();
+        if (!local || local.faceEntity === -1) {
+            return;
+        }
+        const myTarget = local.faceEntity < 32768 ? `npc:${local.faceEntity}` : null;
+        const hitMyTarget = myTarget !== null && event.entity.key === myTarget;
+        const hitMe = event.entity.key === local.key;
+        if (!hitMe && !hitMyTarget) {
+            return;
+        }
+        // First observed damage primes the clock; the next swing syncs the
+        // exact phase (damage lands ~1 tick after the swing that caused it).
+        lastActionTick = lastTick;
+        if (clock.current === 'NOT_ATTACKING') {
+            clock.onEngage();
+        }
     });
 
     ctx.events.on('inventory-changed', (event: InventoryChangedEvent) => {
@@ -127,7 +161,7 @@ export default definePlugin(ctx => {
         }
         lastInv = next;
         if (consumed) {
-            suppressLoopCycle = ctx.client.loopCycle;
+            suppressTick = lastTick;
             clock.onEat(EAT_DELAY_TICKS);
         }
     });
@@ -164,14 +198,14 @@ export default definePlugin(ctx => {
                 g.lineWidth = 3;
                 g.strokeStyle = '#000000';
                 g.strokeText(String(display), point.x, point.y);
-                g.fillStyle = ready ? COLOR_READY : COLOR_COUNT;
+                g.fillStyle = ready ? '#00ff00' : '#ffffff';
                 g.fillText(String(display), point.x, point.y);
             }
             if (showBar) {
                 const fraction = Math.min(Math.max((lastPeriod - ticks) / lastPeriod, 0), 1);
-                g.fillStyle = COLOR_BAR_BG;
+                g.fillStyle = 'rgba(0,0,0,0.6)';
                 g.fillRect(point.x - BAR_W / 2, point.y + 4, BAR_W, BAR_H);
-                g.fillStyle = ready ? COLOR_READY : COLOR_BAR;
+                g.fillStyle = ready ? '#00ff00' : '#ffff00';
                 g.fillRect(point.x - BAR_W / 2, point.y + 4, BAR_W * fraction, BAR_H);
             }
             g.restore();

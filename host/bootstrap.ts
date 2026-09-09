@@ -59,6 +59,8 @@ export class Host {
     private lastInventoryEvent: Inventory | null = null;
     /** Latest swapper-view options + capture labels (debug/e2e observability). */
     private lastMenuOptions: string[] = [];
+    /** Last published server-tick index (wall-clock, 600ms boundaries). */
+    private lastTick = -1;
 
     constructor(private readonly baseUrl: string = '') {
         this.registry = new PluginRegistry(
@@ -111,7 +113,9 @@ export class Host {
                 })),
             objDef: (id: number) => this.clientView().objDef(id),
             inventory: () => this.lastInventoryEvent,
-            menu: () => ({ entries: [...this.lastMenuOptions], capture: this.capture.labels() })
+            menu: () => ({ entries: [...this.lastMenuOptions], capture: this.capture.labels() }),
+            combat: () => this.clientView().combatEntities(),
+            local: () => this.clientView().localPlayer()
         };
         console.log(`[2004lite] host ready (facade ${FACADE_VERSION}, build ${TARGET_CLIENT_BUILD})`);
     }
@@ -148,9 +152,13 @@ export class Host {
 
     private onCycle(ctx: CycleEndContext): void {
         this.lastState = ctx.state;
-        // Tick pulse first: countdown plugins (attack timers) decrement before
-        // same-flush attack resets land, so a fresh period isn't immediately
-        // decremented. QueuedEventBus flushes after all publishes anyway.
+        // Coarse pulses first (tick, then per-frame cycle), so countdowns
+        // advance before same-flush attack resets land. QueuedEventBus
+        // flushes after all publishes anyway.
+        if (ctx.state.tick !== this.lastTick) {
+            this.lastTick = ctx.state.tick;
+            this.bus.publish({ kind: 'tick', loopCycle: ctx.loopCycle, tick: ctx.state.tick });
+        }
         this.bus.publish({ kind: 'cycle', loopCycle: ctx.loopCycle });
         this.differ.watchInventory(INVENTORY_COMID);
         const events = this.differ.snapshot(ctx.state);

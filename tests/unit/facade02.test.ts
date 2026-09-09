@@ -33,6 +33,7 @@ function state(entities: HostCombatEntity[], loopCycle = 100): HostClientState {
     return {
         ingame: true,
         loopCycle,
+        tick: 100,
         statXP: new Int32Array(25),
         statBaseLevel: new Int32Array(25),
         statEffectiveLevel: new Int32Array(25),

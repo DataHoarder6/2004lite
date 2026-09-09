@@ -1,6 +1,7 @@
 // Attack clock: ngraves95/attacktimer tick state machine ported to server
 // attackrate periods (ADR-0011, docs/plugins-spec.md §4). Pure + deterministic:
-// the plugin feeds it facade events, unit tests drive it directly.
+// the plugin feeds it facade events, unit tests drive it directly. onTick
+// means one SERVER tick (600ms facade `tick`), never a client frame.
 //
 // Server model (Content skill_combat, all in ticks of 0.6s):
 // - melee: next attack at now + oc_param(weapon, attackrate), 4 unarmed.

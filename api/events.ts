@@ -36,6 +36,18 @@ export interface CycleEvent {
     loopCycle: number;
 }
 
+/**
+ * Server-tick pulse (600ms wall-clock boundaries). Countdown state
+ * (attack timers, xp drops) advances here — NOT on `cycle`, which fires
+ * per client frame (~50Hz) and would run 30x fast.
+ */
+export interface TickEvent {
+    kind: 'tick';
+    loopCycle: number;
+    /** Wall-clock tick index; handlers derive elapsed ticks from diffs. */
+    tick: number;
+}
+
 export interface GroundItemSpawnedEvent {
     kind: 'ground-item-spawned';
     item: GroundItem;
@@ -81,6 +93,7 @@ export type FacadeEvent =
     | InventoryChangedEvent
     | ChatMessageEvent
     | CycleEvent
+    | TickEvent
     | GroundItemSpawnedEvent
     | GroundItemDespawnedEvent
     | GroundItemQuantityEvent

@@ -1,13 +1,15 @@
 // NPC Attack Timer: ticks until each engaged NPC's next attack, anchored
 // over heads via worldToScreen (ADR-0011, docs/plugins-spec.md). Periods come
-// from the server attackrate snapshot; countdowns sync on observed attack
-// animations and hitsplats. No per-NPC config in v1.
+// from the server attackrate snapshot. Tracking is damage-gated (see
+// tracker.ts): talking/pickpocketing NPCs never shows numbers. Countdowns
+// advance on facade `tick` (server ticks), resync on observed attack anims.
+// No per-NPC config in v1.
 //
 // Engagement = the NPC targets the local player, or is the local player's
 // target (faceEntity encoding, see host/differ.ts faceEntityKey).
 
 import { definePlugin } from '#api/plugin.js';
-import type { AnimStartedEvent, HitsplatEvent } from '#api/events.js';
+import type { AnimStartedEvent, HitsplatEvent, TickEvent } from '#api/events.js';
 import { npcAttackRate, type AttackRateTable } from '#api/combat.js';
 import type { CombatEntity } from '#api/combat.js';
 import tableJson from '../../../data/attackrates.json';
@@ -18,6 +20,9 @@ const TABLE = tableJson as AttackRateTable;
 /** Client faceEntity values below this are npc slots (else player+32768). */
 const FACE_NPC_CUTOFF = 32768;
 const FACE_PLAYER_BASE = 32768;
+
+/** Catch-up cap per tick event (background-tab frame gaps). */
+const MAX_CATCH_UP = 10;
 
 // Fixed-mode viewport: keep head-anchored numbers inside the repainted scene.
 const VIEW_X = 4;
@@ -31,6 +36,10 @@ export default definePlugin(ctx => {
     });
 
     const tracker = new NpcTracker();
+    let lastTick = -1;
+    let engagedNow = new Set<string>();
+
+    const periodOf = (typeId: number): number => npcAttackRate(TABLE, typeId);
 
     function engagedKeys(local: CombatEntity, npcs: CombatEntity[]): Set<string> {
         const keys = new Set<string>();
@@ -43,23 +52,30 @@ export default definePlugin(ctx => {
         return keys;
     }
 
-    ctx.events.on('cycle', () => {
+    ctx.events.on('tick', (event: TickEvent) => {
         if (!ctx.client.ingame) {
             tracker.clear();
+            engagedNow = new Set();
+            lastTick = event.tick;
             return;
         }
+        if (lastTick === -1) {
+            lastTick = event.tick;
+        }
+        let catchUp = Math.min(event.tick - lastTick, MAX_CATCH_UP);
+        lastTick = event.tick;
         const local = ctx.client.localPlayer();
         if (!local) {
             tracker.clear();
+            engagedNow = new Set();
             return;
         }
         const npcs = ctx.client.combatEntities().filter(e => e.kind === 'npc');
-        tracker.update(
-            npcs.map(n => ({ key: n.key, typeId: n.typeId, name: n.name })),
-            engagedKeys(local, npcs),
-            typeId => npcAttackRate(TABLE, typeId)
-        );
-        tracker.onTick();
+        engagedNow = engagedKeys(local, npcs);
+        tracker.update(engagedNow, event.tick);
+        while (catchUp-- > 0) {
+            tracker.onTick();
+        }
     });
 
     ctx.events.on('anim-started', (event: AnimStartedEvent) => {
@@ -68,11 +84,22 @@ export default definePlugin(ctx => {
         }
     });
 
-    // A hitsplat on an engaged NPC also marks it mid-attack: resync in case
-    // the opening anim arrived before engagement (or was missed entirely).
     ctx.events.on('hitsplat', (event: HitsplatEvent) => {
         if (event.entity.kind === 'npc') {
-            tracker.onAnim(event.entity.key);
+            // I (or someone) damaged an engaged NPC: combat evidence.
+            const sight = { key: event.entity.key, typeId: event.entity.typeId, name: event.entity.name };
+            tracker.noteEvidence(sight, engagedNow, periodOf, lastTick);
+            return;
+        }
+        // I took a hit: every NPC facing me is a live attacker.
+        const local = ctx.client.localPlayer();
+        if (!local) {
+            return;
+        }
+        for (const entity of ctx.client.combatEntities()) {
+            if (entity.kind === 'npc' && entity.faceEntity === FACE_PLAYER_BASE + local.slot) {
+                tracker.noteEvidence({ key: entity.key, typeId: entity.typeId, name: entity.name }, engagedNow, periodOf, lastTick);
+            }
         }
     });
 

@@ -2,7 +2,7 @@
 // Shows rising, fading XP drops plus xp/hr per skill, reset-able.
 
 import { definePlugin } from '#api/plugin.js';
-import type { XpGainedEvent } from '#api/events.js';
+import type { TickEvent, XpGainedEvent } from '#api/events.js';
 
 const STORE_KEY = '2004lite:plugin:xp-tracker';
 
@@ -17,7 +17,7 @@ interface TrackedSkill {
 interface ActiveDrop {
     skill: number;
     amount: number;
-    atCycle: number;
+    atTick: number;
 }
 
 export default definePlugin(ctx => {
@@ -42,6 +42,11 @@ export default definePlugin(ctx => {
 
     const tracked = new Map<number, TrackedSkill>();
     const drops: ActiveDrop[] = [];
+    let nowTick = 0;
+
+    ctx.events.on('tick', (event: TickEvent) => {
+        nowTick = event.tick;
+    });
 
     function load(): void {
         try {
@@ -76,7 +81,7 @@ export default definePlugin(ctx => {
             tracked.set(skillIndex, entry);
         }
         entry.xpGained += event.delta;
-        drops.push({ skill: skillIndex, amount: event.delta, atCycle: ctx.client.loopCycle });
+        drops.push({ skill: skillIndex, amount: event.delta, atTick: nowTick });
         if (drops.length > 10) {
             drops.shift();
         }
@@ -88,13 +93,13 @@ export default definePlugin(ctx => {
     load();
 
     ctx.setOverlay({
-        render({ ctx: g, loopCycle }) {
+        render({ ctx: g }) {
             if (!config.get<boolean>('show-overlay')) {
                 return;
             }
             const life = Math.max(config.get<number>('drop-duration'), 1);
 
-            while (drops.length > 0 && loopCycle - drops[0].atCycle > life) {
+            while (drops.length > 0 && nowTick - drops[0].atTick > life) {
                 drops.shift();
             }
             if (drops.length === 0) {
@@ -111,7 +116,7 @@ export default definePlugin(ctx => {
             const baseY = 4 + 20;
             let slot = 0;
             for (const drop of drops.slice(-5)) {
-                const age = loopCycle - drop.atCycle;
+                const age = nowTick - drop.atTick;
                 const progress = Math.min(Math.max(age / life, 0), 1);
                 const y = baseY + slot * 16 - progress * DROP_RISE_PX;
                 // Fade over the last 40% of life.
