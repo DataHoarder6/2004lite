@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { decodeMenuEntry, decodeTargetKind, decodeTargetName } from '../../host/decode.js';
-import { npcAttackRate, weaponAttackRate, isRapidWeapon, type AttackRateTable } from '#api/combat.js';
+import { npcAttackRate, weaponAttackRate, isRapidWeapon, allowsResync, type AttackRateTable } from '#api/combat.js';
 import { StateDiffer } from '../../host/differ.js';
 import type { HostClientState, HostCombatEntity } from '../../host/hooks.js';
 
@@ -95,6 +95,13 @@ describe('attack-rate lookup', () => {
     it('flags rapid-category weapons from the snapshot', () => {
         expect(isRapidWeapon(TABLE, 841)).toBe(true);
         expect(isRapidWeapon(TABLE, 456)).toBe(false);
+    });
+
+    it('suppresses swing resyncs that coincide with incoming damage', () => {
+        expect(allowsResync(100, 100)).toBe(false);
+        expect(allowsResync(101, 100)).toBe(false);
+        expect(allowsResync(102, 100)).toBe(true);
+        expect(allowsResync(100, -1)).toBe(true);
     });
 });
 

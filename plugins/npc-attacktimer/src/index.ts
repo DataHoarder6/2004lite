@@ -10,16 +10,12 @@
 
 import { definePlugin } from '#api/plugin.js';
 import type { AnimStartedEvent, HitsplatEvent, TickEvent } from '#api/events.js';
-import { npcAttackRate, type AttackRateTable } from '#api/combat.js';
+import { npcAttackRate, FACE_PLAYER_BASE, allowsResync, type AttackRateTable } from '#api/combat.js';
 import type { CombatEntity } from '#api/combat.js';
 import tableJson from '../../../data/attackrates.json';
 import { NpcTracker } from './tracker.js';
 
 const TABLE = tableJson as AttackRateTable;
-
-/** Client faceEntity values below this are npc slots (else player+32768). */
-const FACE_NPC_CUTOFF = 32768;
-const FACE_PLAYER_BASE = 32768;
 
 /** Catch-up cap per tick event (background-tab frame gaps). */
 const MAX_CATCH_UP = 10;
@@ -38,12 +34,14 @@ export default definePlugin(ctx => {
     const tracker = new NpcTracker();
     let lastTick = -1;
     let engagedNow = new Set<string>();
+    /** Last tick each NPC took a hit (defend-flinch suppression). */
+    const lastTaken = new Map<string, number>();
 
     const periodOf = (typeId: number): number => npcAttackRate(TABLE, typeId);
 
     function engagedKeys(local: CombatEntity, npcs: CombatEntity[]): Set<string> {
         const keys = new Set<string>();
-        const myTargetNpc = local.faceEntity >= 0 && local.faceEntity < FACE_NPC_CUTOFF ? local.faceEntity : -1;
+        const myTargetNpc = local.faceEntity >= 0 && local.faceEntity < FACE_PLAYER_BASE ? local.faceEntity : -1;
         for (const npc of npcs) {
             if (npc.faceEntity === FACE_PLAYER_BASE + local.slot || npc.slot === myTargetNpc) {
                 keys.add(npc.key);
@@ -72,23 +70,35 @@ export default definePlugin(ctx => {
         }
         const npcs = ctx.client.combatEntities().filter(e => e.kind === 'npc');
         engagedNow = engagedKeys(local, npcs);
-        tracker.update(engagedNow, event.tick);
+        tracker.update(engagedNow);
+        for (const key of [...lastTaken.keys()]) {
+            if (!engagedNow.has(key)) {
+                lastTaken.delete(key);
+            }
+        }
         while (catchUp-- > 0) {
             tracker.onTick();
         }
     });
 
     ctx.events.on('anim-started', (event: AnimStartedEvent) => {
-        if (event.entity.kind === 'npc') {
+        if (event.entity.kind !== 'npc') {
+            return;
+        }
+        // Same-tick incoming damage means a defend flinch, not a swing.
+        if (allowsResync(lastTick, lastTaken.get(event.entity.key) ?? -1)) {
             tracker.onAnim(event.entity.key);
         }
     });
 
     ctx.events.on('hitsplat', (event: HitsplatEvent) => {
         if (event.entity.kind === 'npc') {
-            // I (or someone) damaged an engaged NPC: combat evidence.
+            // I (or someone) damaged an engaged NPC: combat evidence. Its
+            // defend flinch lands the same tick — stamp it so the anim
+            // handler doesn't mistake the flinch for a swing.
+            lastTaken.set(event.entity.key, lastTick);
             const sight = { key: event.entity.key, typeId: event.entity.typeId, name: event.entity.name };
-            tracker.noteEvidence(sight, engagedNow, periodOf, lastTick);
+            tracker.noteEvidence(sight, engagedNow, periodOf);
             return;
         }
         // I took a hit: every NPC facing me is a live attacker.
@@ -98,7 +108,7 @@ export default definePlugin(ctx => {
         }
         for (const entity of ctx.client.combatEntities()) {
             if (entity.kind === 'npc' && entity.faceEntity === FACE_PLAYER_BASE + local.slot) {
-                tracker.noteEvidence({ key: entity.key, typeId: entity.typeId, name: entity.name }, engagedNow, periodOf, lastTick);
+                tracker.noteEvidence({ key: entity.key, typeId: entity.typeId, name: entity.name }, engagedNow, periodOf);
             }
         }
     });

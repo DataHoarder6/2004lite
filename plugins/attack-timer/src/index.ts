@@ -15,7 +15,7 @@
 import { definePlugin } from '#api/plugin.js';
 import { INVENTORY_COMID } from '#api/types.js';
 import type { AnimStartedEvent, HitsplatEvent, InventoryChangedEvent, TickEvent } from '#api/events.js';
-import { RAPID_STYLE_INDEX, isRapidWeapon, weaponAttackRate, type AttackRateTable } from '#api/combat.js';
+import { FACE_PLAYER_BASE, RAPID_STYLE_INDEX, allowsResync, isRapidWeapon, weaponAttackRate, type AttackRateTable } from '#api/combat.js';
 import tableJson from '../../../data/attackrates.json';
 import { AttackClock, RapidRule } from './clock.js';
 
@@ -66,6 +66,7 @@ export default definePlugin(ctx => {
     let lastPeriod = TABLE.defaultRate;
     let lastTick = -1;
     let lastActionTick = -1;
+    let lastTakenTick = -1;
     let suppressTick = -1;
     let lastInv = new Map<number, { id: number; count: number }>();
 
@@ -102,8 +103,13 @@ export default definePlugin(ctx => {
         while (catchUp-- > 0) {
             clock.onTick();
         }
-        const face = ctx.client.localPlayer()?.faceEntity ?? -1;
-        if (clock.current !== 'NOT_ATTACKING' && (face === -1 || event.tick - lastActionTick > IDLE_STAND_DOWN_TICKS)) {
+        const local = ctx.client.localPlayer();
+        const face = local?.faceEntity ?? -1;
+        // Kiting/running clears our facing, but the fight is alive while an
+        // NPC still targets us — stand down only when nothing does and no
+        // swing or damage has landed for a while.
+        const targeted = local !== null && ctx.client.combatEntities().some(e => e.kind === 'npc' && e.faceEntity === FACE_PLAYER_BASE + local.slot);
+        if (clock.current !== 'NOT_ATTACKING' && face === -1 && !targeted && event.tick - lastActionTick > IDLE_STAND_DOWN_TICKS) {
             clock.onDisengage();
         }
     });
@@ -119,7 +125,9 @@ export default definePlugin(ctx => {
             return;
         }
         lastActionTick = lastTick;
-        if (clock.current !== 'NOT_ATTACKING') {
+        // Same-tick incoming damage means this is a defend flinch, not a
+        // swing (allowsResync): stay engaged, skip the resync.
+        if (clock.current !== 'NOT_ATTACKING' && allowsResync(lastTick, lastTakenTick)) {
             clock.onAttackAnim();
         }
     });
@@ -128,6 +136,9 @@ export default definePlugin(ctx => {
         const local = ctx.client.localPlayer();
         if (!local || local.faceEntity === -1) {
             return;
+        }
+        if (event.entity.key === local.key) {
+            lastTakenTick = lastTick;
         }
         const myTarget = local.faceEntity < 32768 ? `npc:${local.faceEntity}` : null;
         const hitMyTarget = myTarget !== null && event.entity.key === myTarget;

@@ -4228,6 +4228,13 @@ export class Client extends GameShell {
 
         // 2004lite: plugin overlay pass, composited after all game areas (ADR-0004)
         ClientHooks.emitDrawOverlays({ ctx: canvas2d, width: this.sWid, height: this.sHei, loopCycle: Client.loopCycle, ingame: this.ingame });
+        // 2004lite: viewport right-click menu above overlays — world-anchored
+        // drawing (tile highlights, head numbers) must sit behind it. Side
+        // and chat menus need no help: overlays clip to the viewport and
+        // never reach those areas.
+        if (this.isMenuOpen && this.menuArea === 0) {
+            this.drawMinimenu();
+        }
     }
 
     private gameDrawMain(): void {

@@ -56,6 +56,25 @@ export const RAPID_STYLE_INDEX = 1;
 /** Server varp id for %com_mode, the 0-3 style index (transmit=yes). */
 export const COMBAT_MODE_VARP = 43;
 
+/**
+ * faceEntity encoding (see host/differ.ts): values below this are npc slots;
+ * otherwise the faced player slot plus this base.
+ */
+export const FACE_PLAYER_BASE = 32768;
+
+/**
+ * An attack animation that lands on the same server tick as incoming damage
+ * on the same entity is almost certainly a defend flinch, not a swing
+ * (damage + defend anim are set together server-side). Timers skip the
+ * resync in that case, else every trade would restart both countdowns and
+ * they would never reach 0.
+ */
+export const RESYNC_SUPPRESS_TICKS = 1;
+
+export function allowsResync(nowTick: number, lastTakenTick: number): boolean {
+    return nowTick - lastTakenTick > RESYNC_SUPPRESS_TICKS;
+}
+
 export function npcAttackRate(table: AttackRateTable, typeId: number): number {
     return table.npc[String(typeId)] ?? table.defaultRate;
 }
