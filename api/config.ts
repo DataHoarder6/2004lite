@@ -41,6 +41,12 @@ export interface ConfigStore {
     get<T extends boolean | number | string = boolean>(key: string): T;
     /** Update a value; persists immediately. Returns false for unknown keys. */
     set(key: string, value: boolean | number | string): boolean;
+    /**
+     * Dynamic keys outside the schema (e.g. per-target custom swap rules).
+     * Same persistence blob; invisible to the settings panel.
+     */
+    getRaw(key: string): boolean | number | string | undefined;
+    setRaw(key: string, value: boolean | number | string): void;
     /** All current values, for rendering. */
     all(): ConfigValues;
 }

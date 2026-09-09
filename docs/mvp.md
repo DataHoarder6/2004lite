@@ -11,12 +11,16 @@ repo, plus green CI. Nothing else is in scope.
    `plugins/index.json` + built plugins into `$ENGINE_DIR/public/`.
 2. Play at `http://localhost/rs2.cgi` — authentic client, no page/engine
    changes.
-3. Four plugins work:
+3. Full-scope plugins (per ADR-0011, not demo scope):
+    - **Menu Swapper** — full RuneLite parity for all 2004 interactions:
+      presets + per-entry custom left/shift-click swaps, persisted rules
+    - **Attack Timer** — port of ngraves95/attacktimer (tick state machine,
+      number-over-player overlay + bar, server `attackrate` periods)
+    - **NPC Attack Timer** — separate plugin, ticks until next attack for
+      every engaged NPC (build-time `attackrate` table from Content)
     - **XP Tracker** — exercises events + overlay + persistence
     - **Inventory Value** — exercises config + cache data + overlay
     - **Camera Zoom** — exercises benign client-local write
-    - **Menu Entry Swapper** — exercises menu mutation (swap-only; entries are
-      never added, removed, or index 0 touched; config-driven rules)
 4. CI: Playwright journey suite green against a programmatically booted
    Engine-TS (sqlite singleworld, checked-in world.json, seeded test account).
 
@@ -28,7 +32,8 @@ repo, plus green CI. Nothing else is in scope.
 3. Event bus.
 4. Config panel.
 5. Typed action API (integration tests assert exact bytes).
-6. The four plugins.
+6. The plugins (one facade pass, then menu-swapper, attack timer, NPC attack
+   timer — ADR-0011).
 
 The test bar (ADR-0006) applies from step 1, not bolted on at the end.
 

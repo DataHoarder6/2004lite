@@ -24,11 +24,11 @@ export default definePlugin(ctx => {
             },
             {
                 key: 'drop-duration',
-                label: 'XP drop duration (cycles)',
+                label: 'XP drop duration (frames)',
                 type: 'number',
-                default: 50,
+                default: 200,
                 min: 10,
-                max: 200
+                max: 600
             }
         ]
     });

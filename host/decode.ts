@@ -3,6 +3,7 @@
 // src/client/MiniMenuAction.ts ids with the 2000 priority bit stripped.
 
 import type { MenuEntry } from '#api/types.js';
+import { stripTags } from '#api/swaprules.js';
 
 /** Base action ids (priority bit removed) grouped by interaction target. */
 const NPC_OPS = new Set([240, 242, 209, 309, 852, 793, 829, 1714]);
@@ -37,7 +38,7 @@ export function decodeTargetKind(action: number): string {
 
 /** Display name is the tail of "Option Name" with color tags stripped. */
 export function decodeTargetName(option: string): string {
-    const plain = option.replace(/@[a-z]+@/g, '').trim();
+    const plain = stripTags(option);
     const space = plain.indexOf(' ');
     return space === -1 ? '' : plain.slice(space + 1).trim();
 }

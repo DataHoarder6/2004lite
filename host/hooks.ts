@@ -86,16 +86,23 @@ export interface MinimenuContext {
     /** Live shift state sampled at menu-build time (ADR-0011). */
     isShiftDown: boolean;
     swap: MinimenuSwap;
+    /**
+     * Append a host-owned row (capture UX, ADR-0011). Inert CANCEL action;
+     * rebuilt every menu build. Returns the index, or -1 at capacity.
+     */
+    appendEntry: (option: string) => number;
 }
 
 type CycleEndHook = (ctx: CycleEndContext) => void;
 type DrawOverlaysHook = (ctx: DrawOverlaysContext) => void;
 type MinimenuHook = (ctx: MinimenuContext) => void;
+type MenuClickConsumer = (index: number) => boolean;
 
 export class ClientHooks {
     private static cycleEnd: CycleEndHook | null = null;
     private static drawOverlays: DrawOverlaysHook | null = null;
     private static minimenuMutate: MinimenuHook | null = null;
+    private static menuClick: MenuClickConsumer | null = null;
 
     static onCycleEnd(hook: CycleEndHook): void {
         this.cycleEnd = hook;
@@ -107,6 +114,16 @@ export class ClientHooks {
 
     static onMinimenu(hook: MinimenuHook): void {
         this.minimenuMutate = hook;
+    }
+
+    /** Host consumes clicks on its own capture rows (ADR-0011). */
+    static onMenuClick(consumer: MenuClickConsumer): void {
+        this.menuClick = consumer;
+    }
+
+    /** True when the host consumed the click (client must skip doAction). */
+    static consumeMenuClick(index: number): boolean {
+        return this.menuClick?.(index) ?? false;
     }
 
     static emitCycleEnd(ctx: CycleEndContext): void {

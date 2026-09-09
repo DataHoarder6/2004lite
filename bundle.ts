@@ -5,6 +5,11 @@ import { minify } from 'terser';
 
 import { nth_identifier } from './identifier.js';
 
+// 2004lite: cross-boundary wire surface (see host/wire-surface.ts). Property
+// names shared between the terser-mangled client bundle and separately-built
+// plugin bundles must not be renamed, or plugins break with no type error.
+import { WIRE_SURFACE } from './host/wire-surface.js';
+
 const define = {
     'process.env.SECURE_ORIGIN': JSON.stringify(process.env.SECURE_ORIGIN ?? 'false'),
     // original key, used 2003-2010
@@ -18,7 +23,7 @@ const define = {
 type BunOutput = {
     source: string;
     sourcemap: string;
-}
+};
 
 async function bunBuild(entry: string, external: string[] = [], minify = true, drop: string[] = []): Promise<BunOutput> {
     const build = await Bun.build({
@@ -27,7 +32,7 @@ async function bunBuild(entry: string, external: string[] = [], minify = true, d
         define,
         external,
         minify,
-        drop,
+        drop
     });
 
     if (!build.success) {
@@ -129,7 +134,10 @@ async function applyTerser(script: BunOutput): Promise<boolean> {
                     'message',
                     'failCount',
                     'error',
-                    'id'
+                    'id',
+
+                    // 2004lite: plugin wire surface (host/wire-surface.ts)
+                    ...WIRE_SURFACE
                 ]
             }
         }
@@ -151,11 +159,7 @@ fs.copyFileSync('src/3rdparty/tinymidipcm/tinymidipcm.wasm', 'out/tinymidipcm.wa
 const args = process.argv.slice(2);
 const prod = args[0] !== 'dev';
 
-const entrypoints = [
-    'src/client/Client.ts',
-    'src/mapview/MapView.ts',
-    'src/io/OnDemandWorker.ts'
-];
+const entrypoints = ['src/client/Client.ts', 'src/mapview/MapView.ts', 'src/io/OnDemandWorker.ts'];
 
 for (const file of entrypoints) {
     const output = path.basename(file).replace('.ts', '.js').toLowerCase();

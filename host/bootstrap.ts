@@ -17,8 +17,10 @@ import type { Overlay } from '#api/overlay.js';
 import type { ConfigField } from '#api/config.js';
 import type { Inventory } from '#api/types.js';
 import { FACADE_VERSION, TARGET_CLIENT_BUILD } from '#api/index.js';
+import { CUSTOM_RULES_KEY, MENU_SWAPPER_ID, isCaptureOption } from '#api/swaprules.js';
 import { SKILL_NAMES, SKILL_USED } from './skills.js';
 import { decodeMenuEntry } from './decode.js';
+import { MenuCapture } from './capture.js';
 import type { HostCombatEntity } from './hooks.js';
 
 /** Client slot of the local player (mirrors LOCAL_PLAYER_INDEX in Client.ts). */
@@ -53,6 +55,8 @@ export class Host {
     private overlays = new Map<string, Overlay>();
     private menuSwappers = new Map<string, (view: import('#api/plugin.js').MenuSwapView) => void>();
     private declaredSchemas = new Map<string, import('#api/config.js').ConfigSchema>();
+    private readonly configs = new Map<string, PluginConfig>();
+    private readonly capture: MenuCapture;
     private lastState: HostClientState | null = null;
     private lastInventoryEvent: Inventory | null = null;
 
@@ -61,6 +65,21 @@ export class Host {
             manifest => this.createContext(manifest),
             () => this.onPluginStateChange()
         );
+        this.capture = new MenuCapture({
+            isSwapperEnabled: () => this.registry.get(MENU_SWAPPER_ID)?.enabled ?? false,
+            getRulesText: () => this.configs.get(MENU_SWAPPER_ID)?.get<string>(CUSTOM_RULES_KEY) ?? '',
+            setRulesText: text => {
+                const config = this.configs.get(MENU_SWAPPER_ID);
+                if (!config) {
+                    return;
+                }
+                if (!config.set(CUSTOM_RULES_KEY, text)) {
+                    config.setRaw(CUSTOM_RULES_KEY, text);
+                }
+            },
+            rerender: () => this.panel.render(this.registry.all()),
+            log: (...parts: unknown[]) => console.log('[2004lite:menu-swapper]', ...parts)
+        });
         this.panel = new SettingsPanel(
             (id, enabled) => {
                 this.registry.setEnabled(id, enabled);
@@ -99,6 +118,7 @@ export class Host {
         ClientHooks.onCycleEnd((ctx: CycleEndContext) => this.onCycle(ctx));
         ClientHooks.onDrawOverlays((ctx: DrawOverlaysContext) => this.onDraw(ctx));
         ClientHooks.onMinimenu((ctx: MinimenuContext) => this.onMenu(ctx));
+        ClientHooks.onMenuClick(index => this.capture.clickConsumed(index));
     }
 
     private async loadPlugins(): Promise<void> {
@@ -162,12 +182,28 @@ export class Host {
     private onMenu(ctx: MinimenuContext): void {
         // Cancel lives at index 0 in the client arrays; the facade view is
         // 1-based with Cancel excluded, and swap() maps back + guards 0.
-        const entries = ctx.entries.slice(1);
+        // Host capture rows (prefix `> `) never enter the swapper view, so
+        // plugins can neither swap nor mistake them for game entries.
+        // The view is live: swap() reorders view entries and retracks index
+        // fields, so sequential plugin swaps observe consistent positions.
+        const list = ctx.entries.flatMap((e, i) => (i === 0 || isCaptureOption(e.option) ? [] : [decodeMenuEntry(i, e)]));
         const view: import('#api/plugin.js').MenuSwapView = {
-            entries: entries.map((e, i) => decodeMenuEntry(i + 1, e)),
+            entries: list,
             // 2004lite: live shift sample travels with the built menu (ADR-0011)
             isShiftDown: ctx.isShiftDown,
-            swap: (i: number, j: number): boolean => ctx.swap(i, j)
+            swap: (i: number, j: number): boolean => {
+                const ok = ctx.swap(i, j);
+                if (ok) {
+                    const a = list.findIndex(e => e.index === i);
+                    const b = list.findIndex(e => e.index === j);
+                    if (a !== -1 && b !== -1) {
+                        [list[a], list[b]] = [list[b], list[a]];
+                        list[a].index = i;
+                        list[b].index = j;
+                    }
+                }
+                return ok;
+            }
         };
         for (const [id, swapper] of this.menuSwappers) {
             const loaded = this.registry.get(id);
@@ -182,6 +218,9 @@ export class Host {
                 this.panel.render(this.registry.all());
             }
         }
+        // Host chrome last: shift+right-click capture rows for the
+        // menu-swapper (ADR-0011). Appended after swappers, invisible to them.
+        this.capture.menuBuilt(ctx);
     }
 
     private onPluginStateChange(): void {
@@ -207,6 +246,7 @@ export class Host {
 
     private createContext(manifest: PluginManifest): PluginContext {
         const config = new PluginConfig(manifest.id);
+        this.configs.set(manifest.id, config);
 
         return {
             manifest,

@@ -6,6 +6,7 @@ export const TARGET_CLIENT_BUILD = 274;
 
 export * from './types.js';
 export * from './combat.js';
+export * from './swaprules.js';
 export * from './events.js';
 export * from './config.js';
 export * from './overlay.js';

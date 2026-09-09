@@ -2600,6 +2600,19 @@ export class Client extends GameShell {
         ClientHooks.emitMinimenu({
             // 2004lite: live shift sample for shift-click swaps (ADR-0011)
             isShiftDown: this.keyHeld[6] === 1,
+            // 2004lite: host-owned capture rows (ADR-0011)
+            appendEntry: (option: string): number => {
+                if (this.menuNumEntries >= 500) {
+                    return -1;
+                }
+                const i: number = this.menuNumEntries++;
+                this.menuOption[i] = option;
+                this.menuAction[i] = MiniMenuAction.CANCEL;
+                this.menuParamA[i] = 0;
+                this.menuParamB[i] = 0;
+                this.menuParamC[i] = 0;
+                return i;
+            },
             entries: Array.from({ length: this.menuNumEntries }, (_v, i): MinimenuEntry => ({
                 option: this.menuOption[i],
                 action: this.menuAction[i],
@@ -8337,7 +8350,10 @@ export class Client extends GameShell {
                 }
 
                 if (option !== -1) {
-                    this.doAction(option);
+                    // 2004lite: host capture rows never reach doAction (ADR-0011)
+                    if (!ClientHooks.consumeMenuClick(option)) {
+                        this.doAction(option);
+                    }
                 }
 
                 this.isMenuOpen = false;

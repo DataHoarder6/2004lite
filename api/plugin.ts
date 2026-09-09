@@ -60,7 +60,11 @@ export interface MenuSwapView {
     entries: ReadonlyArray<MenuEntry>;
     /** Live shift state sampled at menu-build time (ADR-0011). */
     isShiftDown: boolean;
-    /** Exchange two entries by index. Returns false (no-op) for invalid indices. */
+    /**
+     * Exchange two entries by index. Returns false (no-op) for invalid
+     * indices. The view updates immediately: entries reorder and their index
+     * fields track current positions, so sequential swaps stay consistent.
+     */
     swap(i: number, j: number): boolean;
 }
 

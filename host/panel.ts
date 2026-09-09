@@ -1,17 +1,19 @@
 // Host settings panel: DOM, outside the canvas (ADR-0008). Renders one section
 // per plugin from its config schema; edits persist immediately.
 
-import type { LoadedPlugin } from './loader.js';
+import type { LoadedPlugin, PluginLoadError } from './loader.js';
 import type { ConfigField, ConfigSchema } from '#api/config.js';
 
 export class SettingsPanel {
     private root: HTMLElement | null = null;
     private readonly onPluginToggle: (id: string, enabled: boolean) => void;
     private readonly getSchema: (pluginId: string) => ConfigSchema | null;
+    private readonly getFailures: () => PluginLoadError[];
 
-    constructor(onPluginToggle: (id: string, enabled: boolean) => void, getSchema: (pluginId: string) => ConfigSchema | null) {
+    constructor(onPluginToggle: (id: string, enabled: boolean) => void, getSchema: (pluginId: string) => ConfigSchema | null, getFailures: () => PluginLoadError[] = () => []) {
         this.onPluginToggle = onPluginToggle;
         this.getSchema = getSchema;
+        this.getFailures = getFailures;
     }
 
     mount(): void {
@@ -60,12 +62,28 @@ export class SettingsPanel {
         body.innerHTML = '';
 
         if (plugins.length === 0) {
-            body.textContent = 'No plugins loaded.';
-            return;
+            const empty = document.createElement('div');
+            empty.className = 'lite4-note';
+            empty.textContent = 'No plugins loaded.';
+            body.appendChild(empty);
         }
 
         for (const loaded of plugins) {
             body.appendChild(this.renderPlugin(loaded));
+        }
+
+        for (const failure of this.getFailures()) {
+            const row = document.createElement('div');
+            row.className = 'lite4-plugin lite4-failed';
+            const head = document.createElement('div');
+            head.className = 'lite4-plugin-head';
+            head.textContent = failure.id;
+            row.appendChild(head);
+            const err = document.createElement('div');
+            err.className = 'lite4-error';
+            err.textContent = `failed to load: ${failure.reason}`;
+            row.appendChild(err);
+            body.appendChild(row);
         }
     }
 
@@ -135,6 +153,9 @@ export class SettingsPanel {
 
         const label = document.createElement('span');
         label.textContent = field.label;
+        if (field.description) {
+            label.title = field.description;
+        }
         row.appendChild(label);
 
         let input: HTMLInputElement | HTMLSelectElement;
@@ -174,6 +195,15 @@ export class SettingsPanel {
                     loaded.context.config.set(field.key, value);
                 }
             });
+        } else if (field.type === 'string' && String(field.default).includes('\n')) {
+            const area = document.createElement('textarea');
+            area.rows = 4;
+            area.value = current() as string;
+            area.addEventListener('change', () => {
+                loaded.context.config.set(field.key, area.value);
+            });
+            row.appendChild(area);
+            return row;
         } else {
             input = document.createElement('input');
             (input as HTMLInputElement).type = 'text';

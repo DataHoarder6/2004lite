@@ -129,6 +129,8 @@ export const WIRE_SURFACE: string[] = [
     'options',
     'get',
     'set',
+    'getRaw',
+    'setRaw',
     'all',
 
     // __lite4 debug handle

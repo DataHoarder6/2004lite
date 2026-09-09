@@ -55,5 +55,20 @@ existing entries (text, action, params together). Swap-only: entries are never
 added, removed, or synthesized; index 0 (Cancel) is untouchable.
 _Avoid_: menu entry injection
 
+**Attack Rate**: Server-authoritative combat cadence in ticks (0.6s each),
+defined per NPC and per weapon in the Content repo (`attackrate` param,
+default 4). The client cache carries no speed fields; plugins consume a
+build-time table generated from Content (ADR-0011).
+_Avoid_: attack speed (RuneLite's equipment-stat term; ours is the server tick count)
+
+**Attack Timer**: A plugin showing ticks until the local player's next attack,
+driven by the player's `attackrate` plus eat/action delays.
+_Avoid_: metronome (RuneLite plugin name)
+
+**NPC Attack Timer**: A separate plugin showing ticks until each engaged NPC's
+next attack, driven by that NPC's server `attackrate`, synchronized on observed
+attack animations.
+_Avoid_: monster timer, boss timer (works on all NPCs, not a curated list)
+
 **Plugin Hub**: The future community distribution channel (external repos,
 commit-pinned, reviewed). Out of scope until MVP ships.
