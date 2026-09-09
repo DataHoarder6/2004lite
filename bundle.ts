@@ -5,6 +5,11 @@ import { minify } from 'terser';
 
 import { nth_identifier } from './identifier.js';
 
+//2004lite: reserve the host<->plugin wire surface from terser property
+// mangling (host/wire-surface.ts). Without this, prod builds rename facade
+// properties and plugins break at runtime with no type error.
+import { WIRE_SURFACE } from './host/wire-surface.js';
+
 const define = {
     'process.env.SECURE_ORIGIN': JSON.stringify(process.env.SECURE_ORIGIN ?? 'false'),
     // original key, used 2003-2010
@@ -57,6 +62,8 @@ async function applyTerser(script: BunOutput): Promise<boolean> {
             nth_identifier: nth_identifier,
             properties: {
                 reserved: [
+                    //2004lite: host<->plugin wire surface (see import above).
+                    ...WIRE_SURFACE,
                     // stdlib
                     'willReadFrequently',
                     'usedJSHeapSize',

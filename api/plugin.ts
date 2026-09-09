@@ -3,7 +3,7 @@
 import type { ConfigSchema, ConfigStore } from './config.js';
 import type { EventBus } from './events.js';
 import type { Overlay } from './overlay.js';
-import type { ChatMessage, Inventory, MapPosition, SkillSnapshot } from './types.js';
+import type { ChatMessage, GroundItem, GroundProjection, Inventory, MapPosition, SkillSnapshot } from './types.js';
 
 /** Manifest shape: manifest.json beside the built plugin entry. */
 export interface PluginManifest {
@@ -29,6 +29,16 @@ export interface ClientState {
     runEnergy: number;
     mapPosition(): MapPosition | null;
     readInventory(comId: number): Inventory | null;
+    /** Cache object definition (name + shop cost + derived alch values). Null for unknown ids. */
+    objDef(id: number): { name: string; cost: number; highAlch: number; lowAlch: number } | null;
+    /** All ground-item stacks currently visible to the player. */
+    groundItems(): GroundItem[];
+    /**
+     * Project a world tile to screen coords via the client's 3D camera
+     * (getOverlayPos math). Null when offscreen. Callable per-frame from
+     * overlays; height is pixels above the ground.
+     */
+    projectTile(tileX: number, tileZ: number, level: number, height: number): GroundProjection | null;
     recentChat(max: number): ChatMessage[];
     cameraPitch(): number;
     /** Benign client-local write (ADR-0005): clamp-range camera pitch. */
@@ -119,4 +129,4 @@ export function defineMenuPlugin(factory: (ctx: PluginContext) => WithMenuSwap):
 }
 
 /** Re-exported for plugin convenience. */
-export type { SkillSnapshot, Inventory, MapPosition, ChatMessage };
+export type { SkillSnapshot, Inventory, MapPosition, ChatMessage, GroundItem, GroundProjection };

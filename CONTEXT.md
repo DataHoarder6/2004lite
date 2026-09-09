@@ -57,3 +57,18 @@ _Avoid_: menu entry injection
 
 **Plugin Hub**: The future community distribution channel (external repos,
 commit-pinned, reviewed). Out of scope until MVP ships.
+
+**Ground Item**: A dropped object stack resting on a tile and visible to the
+player.
+_Avoid_: drop, loot (loot = what you pick up, not what's on the ground)
+
+**Highlight List**: Name patterns (exact, `*` wildcard, `item>qty` threshold)
+always shown, regardless of value filters.
+_Avoid_: whitelist
+
+**Hide List**: Name patterns never shown, unless also highlighted.
+_Avoid_: blacklist, ignore list
+
+**Alch Value**: Coin value derived from shop `cost`: high `floor(cost*6/10)`,
+low `floor(cost*4/10)`, min 1, plus the content `is_alchable` blocklist.
+_Avoid_: price, GE value (no GE in 2004)

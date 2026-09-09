@@ -13,6 +13,15 @@ export interface HostChatLine {
     cycle: number;
 }
 
+export interface HostGroundStack {
+    level: number;
+    /** World tile coords (build-area + mapBuildBase). */
+    tileX: number;
+    tileZ: number;
+    id: number;
+    count: number;
+}
+
 export interface HostClientState {
     ingame: boolean;
     loopCycle: number;
@@ -29,6 +38,14 @@ export interface HostClientState {
     chat: HostChatLine[];
     setCameraPitch(pitch: number): boolean;
     readInventory(comId: number): { ids: Int32Array; counts: Int32Array } | null;
+    readObjDef(id: number): { name: string; cost: number } | null;
+    /** All ground-item stacks in build-area coords, world-adjusted. */
+    readGroundItems(): HostGroundStack[];
+    /**
+     * World tile -> screen via getOverlayPos math. Null when offscreen.
+     * Reads live camera state, so overlays call it per-frame.
+     */
+    projectTile(tileX: number, tileZ: number, level: number, height: number): { x: number; y: number } | null;
 }
 
 export interface CycleEndContext {

@@ -5,7 +5,7 @@
 import type { HostChatLine, HostClientState } from './hooks.js';
 import type { FacadeEvent } from '#api/events.js';
 import { SKILL_NAMES, SKILL_USED } from './skills.js';
-import type { ChatMessage, ChatType, Inventory, InventoryItem, SkillSnapshot } from '#api/types.js';
+import type { ChatMessage, ChatType, GroundItem, Inventory, InventoryItem, SkillSnapshot } from '#api/types.js';
 
 const CHAT_WINDOW = 10;
 
@@ -39,6 +39,8 @@ export class StateDiffer {
     private lastChatHead: string | null = null;
     private lastChatWindow: ChatMessage[] = [];
     private watchedInventories = new Set<number>();
+    private groundSeen = new Map<string, { qty: number; firstSeenCycle: number }>();
+    private groundCache: GroundItem[] = [];
 
     snapshot(state: HostClientState): FacadeEvent[] {
         const events: FacadeEvent[] = [];
@@ -77,6 +79,7 @@ export class StateDiffer {
 
         events.push(...this.diffChat(state.chat));
         events.push(...this.diffInventories(state));
+        events.push(...this.diffGround(state));
 
         this.lastXp = state.statXP.slice();
         this.lastLevels = state.statEffectiveLevel.slice();
@@ -166,6 +169,80 @@ export class StateDiffer {
         this.lastInventories.clear();
         this.lastChatHead = null;
         this.lastChatWindow = [];
+        this.groundSeen.clear();
+        this.groundCache = [];
+    }
+
+    /** Latest enriched ground items (first-seen ticks attached). */
+    ground(): GroundItem[] {
+        return this.groundCache;
+    }
+
+    /**
+     * Ground-item poll-diff over the client's pile snapshot. Quantity merges
+     * reset first-seen, mirroring the server lifecycle reset (ADR-0012).
+     */
+    private diffGround(state: HostClientState): FacadeEvent[] {
+        const events: FacadeEvent[] = [];
+        const seen = new Set<string>();
+        const items: GroundItem[] = [];
+
+        let stacks: { level: number; tileX: number; tileZ: number; id: number; count: number }[] = [];
+        try {
+            stacks = state.readGroundItems?.() ?? [];
+        } catch {
+            stacks = [];
+        }
+
+        for (const stack of stacks) {
+            const key = `${stack.level}/${stack.tileX}/${stack.tileZ}/${stack.id}`;
+            seen.add(key);
+            const def = safeObjDef(state, stack.id);
+            const previous = this.groundSeen.get(key);
+            const firstSeenCycle = previous && previous.qty === stack.count ? previous.firstSeenCycle : state.loopCycle;
+            const item: GroundItem = {
+                key,
+                id: stack.id,
+                name: def?.name ?? `item ${stack.id}`,
+                qty: stack.count,
+                level: stack.level,
+                tileX: stack.tileX,
+                tileZ: stack.tileZ,
+                highAlch: def ? Math.max(Math.floor((def.cost * 6) / 10), 1) : 0,
+                lowAlch: def ? Math.max(Math.floor((def.cost * 4) / 10), 1) : 0,
+                firstSeenCycle,
+                revealed: false
+            };
+            items.push(item);
+            if (!previous) {
+                this.groundSeen.set(key, { qty: stack.count, firstSeenCycle: state.loopCycle });
+                events.push({ kind: 'ground-item-spawned', item });
+            } else if (previous.qty !== stack.count) {
+                this.groundSeen.set(key, { qty: stack.count, firstSeenCycle: state.loopCycle });
+                events.push({ kind: 'ground-item-quantity', item, previousQty: previous.qty });
+            }
+        }
+
+        for (const [key] of [...this.groundSeen]) {
+            if (!seen.has(key)) {
+                this.groundSeen.delete(key);
+                const stale = this.groundCache.find(item => item.key === key);
+                if (stale) {
+                    events.push({ kind: 'ground-item-despawned', item: stale });
+                }
+            }
+        }
+
+        this.groundCache = items;
+        return events;
+    }
+}
+
+function safeObjDef(state: HostClientState, id: number): { name: string; cost: number } | null {
+    try {
+        return state.readObjDef?.(id) ?? null;
+    } catch {
+        return null;
     }
 }
 

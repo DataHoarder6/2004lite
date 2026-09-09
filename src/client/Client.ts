@@ -12023,6 +12023,57 @@ export class Client extends GameShell {
                     return null;
                 }
                 return { ids: inv.linkObjType.slice(), counts: inv.linkObjNumber.slice() };
+            },
+            //2004lite: cache definition lookup for plugins (name + shop cost).
+            readObjDef: (id: number): { name: string; cost: number } | null => {
+                try {
+                    const def: ObjType = ObjType.list(id);
+                    if (!def) {
+                        return null;
+                    }
+                    return { name: def.name ?? 'unknown', cost: def.cost };
+                } catch {
+                    return null;
+                }
+            },
+            //2004lite: ground-item stacks for the ground-items plugin (all
+            // piles, not just the top-3 the scene renders).
+            readGroundItems: () => {
+                const stacks: { level: number; tileX: number; tileZ: number; id: number; count: number }[] = [];
+                for (let level = 0; level < BuildArea.LEVELS; level++) {
+                    for (let x = 0; x < BuildArea.SIZE; x++) {
+                        for (let z = 0; z < BuildArea.SIZE; z++) {
+                            const objs = this.groundObj[level][x][z];
+                            if (!objs) {
+                                continue;
+                            }
+                            for (let obj = objs.head(); obj !== null; obj = objs.next()) {
+                                stacks.push({
+                                    level,
+                                    tileX: x + this.mapBuildBaseX,
+                                    tileZ: z + this.mapBuildBaseZ,
+                                    id: obj.id,
+                                    count: obj.count
+                                });
+                            }
+                        }
+                    }
+                }
+                return stacks;
+            },
+            //2004lite: world tile -> screen for world-anchored overlays.
+            // Reads live camera state; safe to call per-frame from overlays.
+            projectTile: (tileX: number, tileZ: number, _level: number, height: number): { x: number; y: number } | null => {
+                const lx = tileX - this.mapBuildBaseX;
+                const lz = tileZ - this.mapBuildBaseZ;
+                if (lx < 0 || lz < 0 || lx >= BuildArea.SIZE || lz >= BuildArea.SIZE) {
+                    return null;
+                }
+                this.getOverlayPos(lx * 128 + 64, lz * 128 + 64, height);
+                if (this.projectX <= -1 || this.projectY <= -1) {
+                    return null;
+                }
+                return { x: this.projectX, y: this.projectY };
             }
         };
     }

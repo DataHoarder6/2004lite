@@ -47,3 +47,30 @@ export interface MenuEntry {
     paramB: number;
     paramC: number;
 }
+
+/** One stack resting on a tile, as seen by the local player. */
+export interface GroundItem {
+    /** Stable key: level/worldX/worldZ/id. */
+    key: string;
+    /** ObjType id. */
+    id: number;
+    name: string;
+    qty: number;
+    level: number;
+    /** World tile coords (mapBuildBase-adjusted). */
+    tileX: number;
+    tileZ: number;
+    /** Derived alch values (CONTEXT.md): floor(cost*6/10) / floor(cost*4/10). */
+    highAlch: number;
+    lowAlch: number;
+    /** First-seen loopCycle (client estimate basis, ADR-0012). */
+    firstSeenCycle: number;
+    /** True when first observed via reveal (was private for ~100 ticks). */
+    revealed: boolean;
+}
+
+/** Screen projection of a ground tile; null when offscreen/behind camera. */
+export interface GroundProjection {
+    x: number;
+    y: number;
+}
