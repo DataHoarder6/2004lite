@@ -11,8 +11,10 @@
         "build": "bun run bundle.ts",
         "build:dev": "bun run bundle.ts dev",
         "host:install": "bun run scripts/host-install.ts",
+        "check:wire": "bun run scripts/check-wire-surface.ts",
         "sideload": "bun run scripts/sideload.ts",
         "plugins:build": "bun run scripts/plugins-build.ts",
+        "data:regen": "bun run scripts/regen-attackrates.ts",
         "lint": "eslint src host api plugins scripts",
         "test": "vitest run",
         "test:e2e": "playwright test"
