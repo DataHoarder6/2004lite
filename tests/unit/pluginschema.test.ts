@@ -30,6 +30,8 @@ import thickSkin from '../../plugins/thick-skin/src/index.js';
 import thickSkinManifest from '../../plugins/thick-skin/manifest.json';
 import packetObserver from '../../plugins/packet-observer/src/index.js';
 import packetObserverManifest from '../../plugins/packet-observer/manifest.json';
+import orbs from '../../plugins/orbs/src/index.js';
+import orbsManifest from '../../plugins/orbs/manifest.json';
 
 const PLUGINS: { plugin: Plugin; manifest: PluginManifest }[] = [
     { plugin: attackTimer, manifest: attackTimerManifest as PluginManifest },
@@ -41,7 +43,8 @@ const PLUGINS: { plugin: Plugin; manifest: PluginManifest }[] = [
     { plugin: xpTracker, manifest: xpTrackerManifest as PluginManifest },
     { plugin: sideTabs, manifest: sideTabsManifest as PluginManifest },
     { plugin: thickSkin, manifest: thickSkinManifest as PluginManifest },
-    { plugin: packetObserver, manifest: packetObserverManifest as PluginManifest }
+    { plugin: packetObserver, manifest: packetObserverManifest as PluginManifest },
+    { plugin: orbs, manifest: orbsManifest as PluginManifest }
 ];
 
 function startCapture(plugin: Plugin, manifest: PluginManifest): ConfigSchema | null {

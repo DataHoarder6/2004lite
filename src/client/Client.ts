@@ -1397,6 +1397,22 @@ export class Client extends GameShell {
                 this.loginscreen = 2;
                 this.loginSelect = 0;
             }
+
+            // 2004lite: Enter on the initial screen goes to credentials,
+            // completing Enter, username, password, Enter keyboard login.
+            while (true) {
+                const initialKey: number = this.pollKey();
+                if (initialKey === -1) {
+                    break;
+                }
+                if (initialKey === 10 || initialKey === 13) {
+                    this.loginMes1 = '';
+                    this.loginMes2 = 'Enter your username & password.';
+                    this.loginscreen = 2;
+                    this.loginSelect = 0;
+                    break;
+                }
+            }
         } else if (this.loginscreen === 2) {
             let y: number = ((this.sHei / 2) | 0) - 40;
             y += 30;
@@ -2994,6 +3010,31 @@ export class Client extends GameShell {
         }
     }
 
+    // 2004lite: first continue button under a chat modal, mirroring the
+    // menu-build condition (button text present) minus mouse hover, so Space
+    // works wherever the dialog is.
+    private findContinueCom(rootId: number): number {
+        const root: IfType = IfType.list[rootId];
+        if (!root || !root.children) {
+            return -1;
+        }
+        for (const childId of root.children) {
+            const child: IfType = IfType.list[childId];
+            if (!child) {
+                continue;
+            }
+            if (child.type === 0) {
+                const found: number = this.findContinueCom(child.id);
+                if (found !== -1) {
+                    return found;
+                }
+            } else if (child.buttonType === ButtonType.BUTTON_CONTINUE && child.buttonText) {
+                return child.id;
+            }
+        }
+        return -1;
+    }
+
     // todo: order
     private async handleInputKey(): Promise<void> {
         Client.cyclelogic4++;
@@ -3016,6 +3057,19 @@ export class Client extends GameShell {
                     if (this.mainModalId !== -1 && this.mainModalId === this.reportAbuseComId) {
                         if (key === 8 && this.reportAbuseInput.length > 0) {
                             this.reportAbuseInput = this.reportAbuseInput.substring(0, this.reportAbuseInput.length - 1);
+                        }
+                        break;
+                    }
+
+                    // 2004lite: Space continues chatbox dialogs (same as
+                    // clicking continue). Chat-modal only, never while typing
+                    // anything, so holding space talks continuously.
+                    if (key === 32 && !this.socialInputOpen && !this.dialogInputOpen && this.mainModalId === -1 && this.chatModalId !== -1 && this.chatInput === '') {
+                        const cont: number = this.findContinueCom(this.chatModalId);
+                        if (cont !== -1 && !this.resumedPauseButton) {
+                            this.out.p1Enc(ClientProt.RESUME_PAUSEBUTTON);
+                            this.out.p2(cont);
+                            this.resumedPauseButton = true;
                         }
                         break;
                     }

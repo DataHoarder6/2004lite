@@ -9,6 +9,10 @@ const STORE_KEY = '2004lite:plugin:xp-tracker';
 /** Pixels a drop rises over its life, like the real client. */
 const DROP_RISE_PX = 20;
 
+/** Fixed drop lanes: a drop keeps its lane for life, so expiry of one
+ * never teleports the rest (they previously shifted slots on expiry). */
+const DROP_LANES = 5;
+
 interface TrackedSkill {
     xpGained: number;
     firstGainCycle: number;
@@ -18,6 +22,7 @@ interface ActiveDrop {
     skill: number;
     amount: number;
     atTick: number;
+    lane: number;
 }
 
 export default definePlugin(ctx => {
@@ -81,10 +86,15 @@ export default definePlugin(ctx => {
             tracked.set(skillIndex, entry);
         }
         entry.xpGained += event.delta;
-        drops.push({ skill: skillIndex, amount: event.delta, atTick: nowTick });
-        if (drops.length > 10) {
+        if (drops.length >= DROP_LANES) {
             drops.shift();
         }
+        const taken = new Set(drops.map(drop => drop.lane));
+        let lane = 0;
+        while (lane < DROP_LANES && taken.has(lane)) {
+            lane++;
+        }
+        drops.push({ skill: skillIndex, amount: event.delta, atTick: nowTick, lane: Math.min(lane, DROP_LANES - 1) });
         persist();
     }
 
@@ -99,8 +109,10 @@ export default definePlugin(ctx => {
             }
             const life = Math.max(config.get<number>('drop-duration'), 1);
 
-            while (drops.length > 0 && nowTick - drops[0].atTick > life) {
-                drops.shift();
+            for (let i = drops.length - 1; i >= 0; i--) {
+                if (nowTick - drops[i].atTick > life) {
+                    drops.splice(i, 1);
+                }
             }
             if (drops.length === 0) {
                 return;
@@ -112,17 +124,17 @@ export default definePlugin(ctx => {
             g.fillStyle = '#ffd700';
             // Viewport top-right (fixed-mode scene at (4,4) 512x334): drops
             // previously drew at canvas x=712, over the minimap/side panel.
+            // Lanes are fixed at spawn: expiry never shifts the rest, and
+            // each drop rises at constant speed, then fades out in place.
             const baseX = 4 + 512 - 6;
             const baseY = 4 + 20;
-            let slot = 0;
-            for (const drop of drops.slice(-5)) {
+            for (const drop of drops) {
                 const age = nowTick - drop.atTick;
                 const progress = Math.min(Math.max(age / life, 0), 1);
-                const y = baseY + slot * 16 - progress * DROP_RISE_PX;
+                const y = baseY + drop.lane * 16 - progress * DROP_RISE_PX;
                 // Fade over the last 40% of life.
                 g.globalAlpha = progress < 0.6 ? 1 : 1 - (progress - 0.6) / 0.4;
                 g.fillText(`+${drop.amount} ${skillName(drop.skill)} xp`, baseX, y);
-                slot++;
             }
             g.restore();
         }
