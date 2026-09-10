@@ -58,6 +58,8 @@ export const WIRE_SURFACE: string[] = [
     'setCameraPitch',
     'setSideTab',
     'pressToggleButton',
+    'pressSelectButton',
+    'readVarp',
     'wornWeaponId',
     'combatMode',
     'tick',
@@ -140,6 +142,8 @@ export const WIRE_SURFACE: string[] = [
     'width',
     'height',
     'render',
+    'clicks',
+    'onClick',
 
     // Config schema + store
     'pluginId',

@@ -12118,6 +12118,12 @@ export class Client extends GameShell {
             },
             chat: this.hostChatLines(),
             entities: this.hostCombatEntities(),
+            //2004lite: drained reveal records (see OBJ_REVEAL site). hostState
+            // runs once per tick at cycle end, so drain-per-read is exact.
+            revealed: this.hostRevealed.splice(0),
+            //2004lite: wall-clock server-tick index (600ms). The client runs
+            // ~50 frames/s; countdown plugins key off this, never loopCycle.
+            tick: Math.floor(performance.now() / 600),
             //2004lite: typing state so plugin hotkeys don't hijack chat.
             typing: this.chatInput !== '' || this.dialogInputOpen,
             //2004lite: side-tab switch for plugins (ADR-0005 typed action).
@@ -12150,12 +12156,36 @@ export class Client extends GameShell {
                 this.redrawSide = true;
                 return true;
             },
-            //2004lite: wall-clock server-tick index (600ms). The client runs
-            // ~50 frames/s; countdown plugins key off this, never loopCycle.
-            tick: Math.floor(performance.now() / 600),
-            //2004lite: drained reveal records (see OBJ_REVEAL site). hostState
-            // runs once per tick at cycle end, so drain-per-read is exact.
-            revealed: this.hostRevealed.splice(0),
+            //2004lite: full-frame repaint request (see requestRedraw). Used
+            // when overlays drop so static UI doesn't keep ghost pixels.
+            requestRedraw: (): void => {
+                this.redrawFrame = true;
+            },
+            //2004lite: select-button press for plugins (ADR-0005 typed
+            // action). Replicates the SELECT_BUTTON path exactly.
+            pressSelectButton: (comId: number): boolean => {
+                if (!this.ingame || !this.out) {
+                    return false;
+                }
+                const com: IfType = IfType.list[comId];
+                if (!com || !com.scripts || com.scripts[0]?.[0] !== 5) {
+                    return false;
+                }
+                this.out.p1Enc(ClientProt.IF_BUTTON);
+                this.out.p2(comId);
+                const varp: number = com.scripts[0][1];
+                if (com.scriptOperand && this.var[varp] !== com.scriptOperand[0]) {
+                    this.var[varp] = com.scriptOperand[0];
+                    this.clientVar(varp);
+                    this.redrawSide = true;
+                }
+                return true;
+            },
+            //2004lite: client varp read for plugins (observe-only).
+            readVarp: (id: number): number | null => {
+                const value: number = this.var[id];
+                return value === undefined ? null : value;
+            },
             //2004lite: worn weapon for the attack-timer weapon-period lookup
             // (ADR-0011). Appearance slot 3 is the right hand: 0x200+objId
             // when a weapon is worn (see ClientPlayer model build), else an

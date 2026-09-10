@@ -34,7 +34,7 @@ export default definePlugin(ctx => {
                 key: 'capture-mode',
                 label: 'Capture mode: swap rows on every menu',
                 type: 'boolean',
-                default: false,
+                default: true,
                 description: 'Appends swap-capture rows without holding Shift (browsers force their own menu on Shift+right-click).'
             },
             {

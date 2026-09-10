@@ -16,6 +16,15 @@ import type { ClientState } from '#api/plugin.js';
 const HITPOINTS_INDEX = 3;
 const PRAYER_INDEX = 5;
 
+/** Thick Skin button com (prayer tab) — mirrors the thick-skin plugin. */
+const THICK_SKIN_COMID = 5609;
+/** prayer0 varp mirrors Thick Skin state (Component data). */
+const PRAYER0_VARP = 83;
+/** Run/walk select buttons (controls tab) on the option_run varp. */
+const RUN_WALK_COMID = 152;
+const RUN_RUN_COMID = 153;
+const OPTION_RUN_VARP = 173;
+
 /** Fixed-mode orb column (left of the minimap at ~(550,4)), radius 12. */
 const ORB_X = 548;
 const ORB_R = 12;
@@ -28,6 +37,8 @@ interface OrbDef {
     fill: string;
     value: (client: ClientState) => { current: number; max: number } | null;
     textColor: (fraction: number) => string;
+    /** Active-state highlight (run mode on, thick skin on). */
+    active: (client: ClientState) => boolean;
 }
 
 function skillValue(client: ClientState, index: number): { current: number; max: number } | null {
@@ -44,21 +55,24 @@ const ORBS: OrbDef[] = [
         dy: 0,
         fill: '#c0392b',
         value: client => skillValue(client, HITPOINTS_INDEX),
-        textColor: fraction => (fraction > 0.5 ? '#00ff00' : fraction > 0.25 ? '#ffff00' : '#ff4444')
+        textColor: fraction => (fraction > 0.5 ? '#00ff00' : fraction > 0.25 ? '#ffff00' : '#ff4444'),
+        active: () => false
     },
     {
         key: 'show-prayer',
         dy: 1,
         fill: '#3b82c4',
         value: client => skillValue(client, PRAYER_INDEX),
-        textColor: () => '#ffffff'
+        textColor: () => '#ffffff',
+        active: client => client.readVarp(PRAYER0_VARP) === 1
     },
     {
         key: 'show-run',
         dy: 2,
         fill: '#e6a817',
         value: client => ({ current: Math.max(client.runEnergy, 0), max: 100 }),
-        textColor: () => '#ffffff'
+        textColor: () => '#ffffff',
+        active: client => client.readVarp(OPTION_RUN_VARP) === 1
     }
 ];
 
@@ -72,6 +86,36 @@ export default definePlugin(ctx => {
     });
 
     ctx.setOverlay({
+        clicks() {
+            const regions: { x: number; y: number; width: number; height: number; onClick: () => void }[] = [];
+            if (!ctx.client.ingame) {
+                return regions;
+            }
+            if (config.get<boolean>('show-run')) {
+                regions.push({
+                    x: ORB_X - ORB_R,
+                    y: ORB_TOP + 2 * ORB_GAP - ORB_R,
+                    width: ORB_R * 2,
+                    height: ORB_R * 2,
+                    onClick: () => {
+                        const running = ctx.client.readVarp(OPTION_RUN_VARP) === 1;
+                        ctx.client.pressSelectButton(running ? RUN_WALK_COMID : RUN_RUN_COMID);
+                    }
+                });
+            }
+            if (config.get<boolean>('show-prayer')) {
+                regions.push({
+                    x: ORB_X - ORB_R,
+                    y: ORB_TOP + 1 * ORB_GAP - ORB_R,
+                    width: ORB_R * 2,
+                    height: ORB_R * 2,
+                    onClick: () => {
+                        ctx.client.pressToggleButton(THICK_SKIN_COMID);
+                    }
+                });
+            }
+            return regions;
+        },
         render({ ctx: g }) {
             if (!ctx.client.ingame) {
                 return;
@@ -107,8 +151,8 @@ export default definePlugin(ctx => {
                 g.restore();
                 g.beginPath();
                 g.arc(ORB_X, y, ORB_R, 0, Math.PI * 2);
-                g.lineWidth = 1;
-                g.strokeStyle = '#888888';
+                g.lineWidth = orb.active(ctx.client) ? 3 : 1;
+                g.strokeStyle = orb.active(ctx.client) ? '#00ff00' : '#888888';
                 g.stroke();
             }
             g.restore();

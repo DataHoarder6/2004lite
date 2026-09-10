@@ -256,6 +256,13 @@ export class SettingsPanel {
             input.addEventListener('change', () => {
                 loaded.context.config.set(field.key, (input as HTMLInputElement).value);
             });
+            // Text commits on blur only — Enter must commit too, else typed
+            // values (hotkey names, filters) silently never apply.
+            input.addEventListener('keydown', (event: KeyboardEvent) => {
+                if (event.key === 'Enter') {
+                    (input as HTMLInputElement).blur();
+                }
+            });
         }
         row.appendChild(input);
         return row;

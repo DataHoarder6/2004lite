@@ -86,6 +86,19 @@ export interface HostClientState {
      */
     pressToggleButton(comId: number): boolean;
     /**
+     * Press a select-button component (SELECT_BUTTON path). False when
+     * logged out or the com is no select button.
+     */
+    pressSelectButton(comId: number): boolean;
+    /** Read a client-synced varp. Null for unknown ids. */
+    readVarp(id: number): number | null;
+    /**
+     * Request a full-frame repaint (host lifecycle only, e.g. after an
+     * overlay is dropped: static UI regions keep stale overlay pixels
+     * otherwise). Plugins never call this.
+     */
+    requestRedraw(): void;
+    /**
      * Worn right-hand obj id (local player's appearance slot 3,
      * 0x200+objId when a weapon is worn). Null when unarmed: the server
      * falls back to attackrate 4 (player_melee/ranged.rs2). Read by the

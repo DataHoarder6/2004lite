@@ -71,6 +71,8 @@ export class Host {
     private readonly packetRing: import('#api/packets.js').ParsedPacket[] = [];
     /** Latest swapper-view options + capture labels (debug/e2e observability). */
     private lastMenuOptions: string[] = [];
+    /** Latest overlay draw surface (canvas element + game size) for click mapping. */
+    private lastSurface: { canvas: HTMLCanvasElement; width: number; height: number } | null = null;
     /** Last published server-tick index (wall-clock, 600ms boundaries). */
     private lastTick = -1;
 
@@ -140,6 +142,7 @@ export class Host {
         ClientHooks.onMenuClick(index => this.capture.clickConsumed(index));
         ClientHooks.onPacket(tap => this.onPacket(tap));
         window.addEventListener('keydown', this.onHotkey);
+        window.addEventListener('mousedown', this.onOverlayClick, true);
     }
 
     /** Packet-observer fanout (ADR-0014): names resolved, ring kept, guarded. */
@@ -173,6 +176,58 @@ export class Host {
             }
         }
     }
+
+    /**
+     * Overlay click routing (left button only). Regions come from each
+     * enabled overlay's clicks(); the first hit wins and the game never sees
+     * the click (capture-phase stop before canvas handlers). Handler throws
+     * follow the standard failure policy (ADR-0007).
+     */
+    private onOverlayClick = (event: MouseEvent): void => {
+        if (event.button !== 0) {
+            return;
+        }
+        const surface = this.lastSurface;
+        if (!this.lastState?.ingame || !surface) {
+            return;
+        }
+        const rect = surface.canvas.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) {
+            return;
+        }
+        const x = (event.clientX - rect.left) * (surface.width / rect.width);
+        const y = (event.clientY - rect.top) * (surface.height / rect.height);
+        for (const loaded of this.registry.all()) {
+            if (!loaded.enabled) {
+                continue;
+            }
+            const overlay = this.overlays.get(loaded.manifest.id);
+            if (!overlay?.clicks) {
+                continue;
+            }
+            let regions: import('#api/overlay.js').OverlayClickRegion[];
+            try {
+                regions = overlay.clicks({ width: surface.width, height: surface.height }) ?? [];
+            } catch (error) {
+                this.registry.fail(loaded, error);
+                this.panel.render(this.registry.all());
+                continue;
+            }
+            for (const region of regions) {
+                if (x >= region.x && y >= region.y && x < region.x + region.width && y < region.y + region.height) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    try {
+                        region.onClick();
+                    } catch (error) {
+                        this.registry.fail(loaded, error);
+                        this.panel.render(this.registry.all());
+                    }
+                    return;
+                }
+            }
+        }
+    };
 
     /**
      * Plugin hotkey dispatch (observe-only, ADR-0005). Skipped while logged
@@ -253,6 +308,7 @@ export class Host {
     }
 
     private onDraw(ctx: DrawOverlaysContext): void {
+        this.lastSurface = { canvas: ctx.ctx.canvas, width: ctx.width, height: ctx.height };
         if (!ctx.ingame) {
             return;
         }
@@ -338,6 +394,11 @@ export class Host {
         }
         this.hotkeys.delete(pluginId);
         this.packetSubs.delete(pluginId);
+        try {
+            this.lastState?.requestRedraw();
+        } catch {
+            // repaint is best-effort; disable must never fail
+        }
         this.overlays.delete(pluginId);
         this.menuSwappers.delete(pluginId);
     }
@@ -466,6 +527,8 @@ export class Host {
             setCameraPitch: (pitch: number) => latest()?.setCameraPitch(pitch) ?? false,
             setSideTab: (index: number) => latest()?.setSideTab(index) ?? false,
             pressToggleButton: (comId: number) => latest()?.pressToggleButton(comId) ?? false,
+            pressSelectButton: (comId: number) => latest()?.pressSelectButton(comId) ?? false,
+            readVarp: (id: number) => latest()?.readVarp(id) ?? null,
             wornWeaponId: () => latest()?.wornWeaponId ?? null,
             combatMode: () => latest()?.combatMode ?? 0,
             combatEntities: () => latest()?.entities.map(toCombatEntity) ?? [],

@@ -59,6 +59,17 @@ export interface ClientState {
      */
     pressToggleButton(comId: number): boolean;
     /**
+     * Press a select-button interface component (e.g. run/walk in the
+     * controls tab). Replicates the SELECT_BUTTON path exactly. False when
+     * invalid.
+     */
+    pressSelectButton(comId: number): boolean;
+    /**
+     * Read a client-synced varp (e.g. run mode). Null for unknown ids.
+     * Observe-only; writing varps goes through button actions above.
+     */
+    readVarp(id: number): number | null;
+    /**
      * Worn right-hand obj id for weapon attack-rate lookup (ADR-0011).
      * Null when unarmed: the server falls back to attackrate 4.
      */

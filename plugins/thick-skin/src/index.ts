@@ -19,15 +19,17 @@ export default definePlugin(ctx => {
             {
                 key: 'key',
                 label: 'Toggle key',
-                type: 'string',
+                type: 'enum',
                 default: 'Tab',
-                description: 'KeyboardEvent.key value. Hotkeys never fire while typing or logged out.'
+                options: [...ALLOWED_KEYS],
+                description: 'Hotkeys never fire while typing or logged out.'
             }
         ]
     });
 
     function currentKey(): string {
-        return config.get<string>('key').trim();
+        const key = config.get<string>('key').trim();
+        return ALLOWED_KEYS.includes(key) ? key : '';
     }
 
     const startKey = currentKey();

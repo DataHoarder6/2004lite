@@ -8,9 +8,28 @@ export interface OverlayRenderContext {
     loopCycle: number;
 }
 
+export interface OverlayClickContext {
+    width: number;
+    height: number;
+}
+
+export interface OverlayClickRegion {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    onClick: () => void;
+}
+
 export interface Overlay {
     /** Drawn every render frame while the plugin is enabled and in-game. */
     render(context: OverlayRenderContext): void;
+    /**
+     * Clickable regions in canvas coords, evaluated per click (positions
+     * usually mirror render math). First hit across plugins wins; the game
+     * never sees consumed clicks.
+     */
+    clicks?(context: OverlayClickContext): OverlayClickRegion[];
 }
 
 /** Convenience: register a plain draw function as an overlay. */
